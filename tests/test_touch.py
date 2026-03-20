@@ -85,11 +85,11 @@ class TestTouchPanelRead:
 
 
 class TestTouchMapping:
-    def test_swap_xy(self, touch_panel):
-        # Default config: touch_swap_xy=True
+    def test_swap_xy_and_invert_y(self, touch_panel):
+        # Default config: touch_swap_xy=True, touch_invert_y=True
         pt = touch_panel._map(100, 200)
         assert pt.x == 200  # y becomes x
-        assert pt.y == 100  # x becomes y
+        assert pt.y == 21   # x becomes y, then inverted (121 - 100)
 
     def test_clamps_to_bounds(self, touch_panel):
         pt = touch_panel._map(9999, 9999)

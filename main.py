@@ -61,7 +61,7 @@ class App:
                 )
                 if action is not None:
                     self._dispatch(action, epd)
-                    time.sleep(0.3)
+                    touch.flush()  # wait for finger lift before next event
 
     # ── navigation ──────────────────────────────────────────────
 

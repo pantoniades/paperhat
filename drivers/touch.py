@@ -101,6 +101,14 @@ class TouchPanel:
                 return []
             time.sleep(0.05)
 
+    def flush(self, timeout: float = 2.0) -> None:
+        """Discard pending touches until finger is lifted or *timeout*."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not self.read():
+                break
+            time.sleep(0.05)
+
     # ── internals ───────────────────────────────────────────────
 
     _KNOWN_MODELS = {"1158", "1151", "911"}

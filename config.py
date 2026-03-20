@@ -44,7 +44,7 @@ class AppConfig:
     # Touch coordinate mapping (portrait panel → landscape UI)
     touch_swap_xy: bool = True
     touch_invert_x: bool = False
-    touch_invert_y: bool = False
+    touch_invert_y: bool = True
 
 
 HW = HardwareConfig()

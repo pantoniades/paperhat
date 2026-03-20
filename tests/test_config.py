@@ -41,7 +41,7 @@ class TestAppConfig:
         assert app.nws_agent == "paperhat-app"
         assert app.touch_swap_xy is True
         assert app.touch_invert_x is False
-        assert app.touch_invert_y is False
+        assert app.touch_invert_y is True
 
     def test_frozen(self):
         with pytest.raises(dataclasses.FrozenInstanceError):
