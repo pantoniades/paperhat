@@ -1,0 +1,6 @@
+Pillow>=9.0
+RPi.GPIO
+spidev
+smbus2
+requests
+gtfs-realtime-bindings

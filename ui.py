@@ -1,0 +1,302 @@
+"""Screen rendering and touch-zone handling for the e-Paper display.
+
+Each Screen subclass owns its rendering and touch interpretation.
+Touch results are lightweight action objects that the App dispatches.
+"""
+
+from __future__ import annotations
+
+import math
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont
+
+from config import SCREEN_H, SCREEN_W
+from drivers.touch import TouchPoint
+from services.mta import Arrival, Station
+from services.weather import Weather
+
+# ── fonts ───────────────────────────────────────────────────────
+
+_FONT_PATHS = [
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
+    Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+]
+
+
+def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    for p in _FONT_PATHS:
+        if p.exists():
+            return ImageFont.truetype(str(p), size)
+    return ImageFont.load_default()
+
+
+LG, MD, SM = _font(18), _font(13), _font(11)
+
+# ── touch zones ─────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class Rect:
+    """Axis-aligned rectangle for hit-testing."""
+
+    x: int
+    y: int
+    w: int
+    h: int
+
+    def contains(self, pt: TouchPoint) -> bool:
+        return self.x <= pt.x < self.x + self.w and self.y <= pt.y < self.y + self.h
+
+
+# ── actions (returned by screens, dispatched by App) ────────────
+
+
+@dataclass(frozen=True, slots=True)
+class ShowWeather:
+    """Navigate to the weather screen."""
+
+
+@dataclass(frozen=True, slots=True)
+class ShowSubway:
+    """Navigate to the nearby-stations screen."""
+
+
+@dataclass(frozen=True, slots=True)
+class SelectStation:
+    """Navigate to arrivals for a specific station."""
+
+    station: Station
+
+
+@dataclass(frozen=True, slots=True)
+class GoBack:
+    """Pop one level in the navigation stack."""
+
+
+Action = ShowWeather | ShowSubway | SelectStation | GoBack
+
+# ── screen base ─────────────────────────────────────────────────
+
+
+class Screen(ABC):
+    @abstractmethod
+    def render(self) -> Image.Image: ...
+
+    @abstractmethod
+    def on_touch(self, pt: TouchPoint) -> Action | None: ...
+
+    @staticmethod
+    def _canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        img = Image.new("1", (SCREEN_W, SCREEN_H), 255)
+        return img, ImageDraw.Draw(img)
+
+
+# ── shared helpers ──────────────────────────────────────────────
+
+_BACK_ZONE = Rect(0, 0, 40, 32)
+
+
+def _back_arrow(draw: ImageDraw.ImageDraw) -> None:
+    draw.polygon([(22, 8), (8, 16), (22, 24)], fill=0)
+
+
+def _hline(draw: ImageDraw.ImageDraw, y: int) -> None:
+    draw.line([(10, y), (SCREEN_W - 10, y)], fill=0)
+
+
+# ── HomeScreen ──────────────────────────────────────────────────
+
+
+class HomeScreen(Screen):
+    """Two tappable icons: Weather (left) · Subway (right)."""
+
+    _LEFT = Rect(0, 0, SCREEN_W // 2, SCREEN_H)
+    _RIGHT = Rect(SCREEN_W // 2, 0, SCREEN_W // 2, SCREEN_H)
+
+    def render(self) -> Image.Image:
+        img, draw = self._canvas()
+        mid = SCREEN_W // 2
+
+        draw.line([(mid, 8), (mid, SCREEN_H - 8)], fill=0)
+
+        # sun icon
+        cx, cy, r = mid // 2, SCREEN_H // 2 - 12, 16
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=0, width=2)
+        for deg in range(0, 360, 45):
+            a = math.radians(deg)
+            draw.line([
+                (cx + int((r + 5) * math.cos(a)), cy + int((r + 5) * math.sin(a))),
+                (cx + int((r + 11) * math.cos(a)), cy + int((r + 11) * math.sin(a))),
+            ], fill=0, width=2)
+        draw.text((cx, cy + r + 18), "Weather", font=MD, fill=0, anchor="mt")
+
+        # subway icon (circle with S)
+        sx, sy, sr = mid + mid // 2, SCREEN_H // 2 - 10, 20
+        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], outline=0, width=3)
+        draw.text((sx, sy), "S", font=LG, fill=0, anchor="mm")
+        draw.text((sx, sy + sr + 14), "Subway", font=MD, fill=0, anchor="mt")
+
+        return img
+
+    def on_touch(self, pt: TouchPoint) -> Action | None:
+        if self._LEFT.contains(pt):
+            return ShowWeather()
+        if self._RIGHT.contains(pt):
+            return ShowSubway()
+        return None
+
+
+# ── WeatherScreen ───────────────────────────────────────────────
+
+
+class WeatherScreen(Screen):
+    def __init__(self, data: Weather) -> None:
+        self.data = data
+
+    def render(self) -> Image.Image:
+        img, draw = self._canvas()
+        _back_arrow(draw)
+        draw.text((40, 4), "NYC Weather", font=LG, fill=0)
+
+        y = 30
+        draw.text((10, y), f"{self.data.temp}°{self.data.unit}", font=LG, fill=0)
+        y += 22
+        draw.text((10, y), self.data.summary, font=MD, fill=0)
+        y += 16
+        draw.text((10, y), f"Wind: {self.data.wind}", font=SM, fill=0)
+        y += 16
+        _hline(draw, y)
+        y += 4
+        for h in self.data.hourly:
+            draw.text((10, y), f"{h.time}  {h.temp}°  {h.summary}", font=SM, fill=0)
+            y += 14
+            if y > SCREEN_H - 6:
+                break
+        return img
+
+    def on_touch(self, pt: TouchPoint) -> Action | None:
+        return GoBack() if _BACK_ZONE.contains(pt) else None
+
+
+# ── SubwayScreen (3 nearest stations) ───────────────────────────
+
+
+class SubwayScreen(Screen):
+    """Lists the three closest stations; tap one to see arrivals."""
+
+    _ROW_H = 30
+    _TOP = 26  # y where station rows begin
+
+    def __init__(self, stations: list[Station]) -> None:
+        self.stations = stations
+        self._zones = [
+            Rect(0, self._TOP + i * self._ROW_H, SCREEN_W, self._ROW_H)
+            for i in range(len(stations))
+        ]
+
+    def render(self) -> Image.Image:
+        img, draw = self._canvas()
+        _back_arrow(draw)
+        draw.text((40, 4), "Nearby Stations", font=MD, fill=0)
+        _hline(draw, self._TOP - 2)
+
+        for i, station in enumerate(self.stations):
+            y = self._TOP + i * self._ROW_H
+            draw.text((14, y + 2), station.name, font=MD, fill=0)
+            routes_str = "  ".join(station.routes)
+            draw.text((14, y + 16), routes_str, font=SM, fill=0)
+        return img
+
+    def on_touch(self, pt: TouchPoint) -> Action | None:
+        if _BACK_ZONE.contains(pt):
+            return GoBack()
+        for zone, station in zip(self._zones, self.stations):
+            if zone.contains(pt):
+                return SelectStation(station)
+        return None
+
+
+# ── StationScreen (arrivals by direction) ───────────────────────
+
+
+class StationScreen(Screen):
+    """Arrivals for one station, grouped by direction."""
+
+    def __init__(self, arrivals: list[Arrival], station: Station) -> None:
+        self.arrivals = arrivals
+        self.station = station
+
+    def render(self) -> Image.Image:
+        img, draw = self._canvas()
+        _back_arrow(draw)
+
+        # truncate long names to fit
+        name = self.station.name
+        if len(name) > 24:
+            name = name[:22] + "…"
+        draw.text((40, 4), name, font=MD, fill=0)
+        _hline(draw, 22)
+
+        north = [a for a in self.arrivals if a.direction == "N"]
+        south = [a for a in self.arrivals if a.direction == "S"]
+
+        y = 26
+        y = self._draw_direction(draw, f"↑ {self.station.north_label}", north, y)
+        y += 4
+        y = self._draw_direction(draw, f"↓ {self.station.south_label}", south, y)
+        return img
+
+    @staticmethod
+    def _draw_direction(
+        draw: ImageDraw.ImageDraw, label: str, arrivals: list[Arrival], y: int,
+    ) -> int:
+        draw.text((10, y), label, font=SM, fill=0)
+        y += 14
+        if not arrivals:
+            draw.text((14, y), "—", font=SM, fill=0)
+            return y + 14
+
+        x = 14
+        for arr in arrivals[:6]:
+            token = f"{arr.line} {arr.minutes}m"
+            bbox = draw.textbbox((0, 0), token, font=SM)
+            tw = bbox[2] - bbox[0]
+            if x + tw > SCREEN_W - 10:
+                y += 14
+                x = 14
+                if y > SCREEN_H - 14:
+                    break
+            draw.text((x, y), token, font=SM, fill=0)
+            x += tw + 12
+        return y + 14
+
+    def on_touch(self, pt: TouchPoint) -> Action | None:
+        return GoBack() if _BACK_ZONE.contains(pt) else None
+
+
+# ── MessageScreen ───────────────────────────────────────────────
+
+
+class MessageScreen(Screen):
+    """Full-screen message (loading, error)."""
+
+    def __init__(self, text: str, *, show_back: bool = False) -> None:
+        self.text = text
+        self._show_back = show_back
+
+    def render(self) -> Image.Image:
+        img, draw = self._canvas()
+        if self._show_back:
+            _back_arrow(draw)
+        draw.text(
+            (SCREEN_W // 2, SCREEN_H // 2),
+            self.text, font=MD, fill=0, anchor="mm",
+        )
+        return img
+
+    def on_touch(self, pt: TouchPoint) -> Action | None:
+        return GoBack() if self._show_back else None
