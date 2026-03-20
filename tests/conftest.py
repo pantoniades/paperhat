@@ -135,11 +135,14 @@ def sample_stations() -> list[Station]:
 
 @pytest.fixture()
 def sample_arrivals() -> list[Arrival]:
+    import time as _t
+
+    now = _t.time()
     return [
-        Arrival(line="2", direction="N", minutes=3),
-        Arrival(line="3", direction="N", minutes=7),
-        Arrival(line="2", direction="S", minutes=1),
-        Arrival(line="3", direction="S", minutes=5),
+        Arrival(line="2", direction="N", arrival_time=now + 180),
+        Arrival(line="3", direction="N", arrival_time=now + 420),
+        Arrival(line="2", direction="S", arrival_time=now + 60),
+        Arrival(line="3", direction="S", arrival_time=now + 300),
     ]
 
 

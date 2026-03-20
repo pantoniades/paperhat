@@ -85,9 +85,23 @@ class TestStation:
 
 class TestArrival:
     def test_frozen(self):
-        a = Arrival(line="2", direction="N", minutes=3)
+        a = Arrival(line="2", direction="N", arrival_time=1e9)
         with pytest.raises(AttributeError):
             a.line = "3"
+
+    def test_minutes_computed_live(self):
+        import time as _t
+
+        a = Arrival(line="2", direction="N", arrival_time=_t.time() + 300)
+        assert 4 <= a.minutes <= 5
+
+    def test_is_future(self):
+        import time as _t
+
+        future = Arrival(line="2", direction="N", arrival_time=_t.time() + 60)
+        past = Arrival(line="2", direction="N", arrival_time=_t.time() - 60)
+        assert future.is_future
+        assert not past.is_future
 
 
 # ── route → feed mapping ───────────────────────────────────────
@@ -248,7 +262,7 @@ class TestMTAServiceFetch:
         assert len(result) == 2
         assert result[0].line == "2"
         assert result[0].direction == "N"
-        assert result[0].minutes in (2, 3)  # timing-sensitive
+        assert result[0].minutes in (2, 3)  # computed live from arrival_time
 
     @responses.activate
     def test_filters_unrelated_stops(self, sample_station):
@@ -292,7 +306,7 @@ class TestMTAServiceFetch:
             body=data, content_type="application/octet-stream",
         )
         result = MTAService().fetch(sample_station)
-        assert result[0].minutes <= result[1].minutes
+        assert result[0].arrival_time <= result[1].arrival_time
 
     @responses.activate
     def test_direction_from_stop_suffix(self, sample_station):

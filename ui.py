@@ -71,7 +71,6 @@ class SelectStation:
     """Navigate to arrivals for a specific station."""
 
     station: Station
-    arrivals: list[Arrival]
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,16 +109,20 @@ def _hline(draw: ImageDraw.ImageDraw, y: int) -> None:
     draw.line([(10, y), (SCREEN_W - 10, y)], fill=0)
 
 
-def _clock(minutes: int) -> str:
-    """Convert minutes-from-now to a clock time like '11:40'."""
-    t = datetime.now() + timedelta(minutes=minutes)
-    return t.strftime("%H:%M")
+def _clock(arrival: Arrival) -> str:
+    """Format an arrival's absolute time as 'HH:MM'."""
+    return datetime.fromtimestamp(arrival.arrival_time).strftime("%H:%M")
+
+
+def _future(arrivals: list[Arrival]) -> list[Arrival]:
+    """Filter out arrivals that are in the past."""
+    return [a for a in arrivals if a.is_future]
 
 
 def _next_arrival(arrivals: list[Arrival], direction: str) -> Arrival | None:
-    """First arrival in the given direction, or None."""
+    """First future arrival in the given direction, or None."""
     for a in arrivals:
-        if a.direction == direction:
+        if a.is_future and a.direction == direction:
             return a
     return None
 
@@ -230,7 +233,7 @@ class SubwayScreen(Screen):
             parts = [routes_str]
             for direction, arrow in (("N", "↑"), ("S", "↓")):
                 nxt = _next_arrival(self.arrivals[i], direction)
-                parts.append(f"{arrow}{_clock(nxt.minutes)}" if nxt else f"{arrow}—")
+                parts.append(f"{arrow}{_clock(nxt)}" if nxt else f"{arrow}—")
             draw.text((14, y + 16), "  ".join(parts), font=SM, fill=0)
         return img
 
@@ -239,7 +242,7 @@ class SubwayScreen(Screen):
             return GoBack()
         for i, zone in enumerate(self._zones):
             if zone.contains(pt):
-                return SelectStation(self.stations[i], self.arrivals[i])
+                return SelectStation(self.stations[i])
         return None
 
 
@@ -264,8 +267,9 @@ class StationScreen(Screen):
         draw.text((40, 4), name, font=MD, fill=0)
         _hline(draw, 22)
 
-        north = [a for a in self.arrivals if a.direction == "N"]
-        south = [a for a in self.arrivals if a.direction == "S"]
+        live = _future(self.arrivals)
+        north = [a for a in live if a.direction == "N"]
+        south = [a for a in live if a.direction == "S"]
 
         y = 26
         y = self._draw_direction(draw, f"↑ {self.station.north_label}", north, y)
@@ -285,7 +289,7 @@ class StationScreen(Screen):
 
         x = 14
         for arr in arrivals[:3]:
-            token = f"{arr.line} {_clock(arr.minutes)}"
+            token = f"{arr.line} {_clock(arr)}"
             bbox = draw.textbbox((0, 0), token, font=SM)
             tw = bbox[2] - bbox[0]
             if x + tw > SCREEN_W - 10:

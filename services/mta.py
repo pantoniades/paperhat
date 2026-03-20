@@ -85,7 +85,15 @@ class Arrival:
 
     line: str
     direction: str  # "N" or "S"
-    minutes: int
+    arrival_time: float  # unix timestamp
+
+    @property
+    def minutes(self) -> int:
+        return max(0, int((self.arrival_time - time.time()) / 60))
+
+    @property
+    def is_future(self) -> bool:
+        return self.arrival_time > time.time()
 
 
 # ── station finder ──────────────────────────────────────────────
@@ -209,13 +217,13 @@ class MTAService:
                     arrival = Arrival(
                         line=route,
                         direction="N" if stu.stop_id[-1] == "N" else "S",
-                        minutes=int((stu.arrival.time - now) / 60),
+                        arrival_time=float(stu.arrival.time),
                     )
                     for si in stop_to_idx.get(base_id, []):
                         results[si].append(arrival)
 
         for arr_list in results:
-            arr_list.sort(key=lambda a: a.minutes)
+            arr_list.sort(key=lambda a: a.arrival_time)
         return results
 
 

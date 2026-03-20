@@ -60,7 +60,7 @@ class TestTouchToActionFlow:
         action = screen.on_touch(TouchPoint(120, screen._TOP + 5))
         assert hasattr(action, "station")
         assert action.station is sample_stations[0]
-        assert action.arrivals is sample_arrivals
+        assert action.station is sample_stations[0]
 
     def test_back_from_weather(self, sample_weather):
         screen = WeatherScreen(sample_weather)
@@ -91,6 +91,7 @@ class TestFullRoundTrip:
             MockWeather.return_value.fetch.return_value = sample_weather
             MockFinder.return_value.nearest.return_value = sample_stations
             MockMTA.return_value.fetch_batch.return_value = [sample_arrivals, [], []]
+            MockMTA.return_value.fetch.return_value = sample_arrivals
 
             from main import App
 

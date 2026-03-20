@@ -52,17 +52,15 @@ class TestActions:
     def test_show_weather_has_slots(self):
         assert not hasattr(ShowWeather(), "__dict__")
 
-    def test_select_station_holds_data(self, sample_station, sample_arrivals):
-        action = SelectStation(station=sample_station, arrivals=sample_arrivals)
+    def test_select_station_holds_station(self, sample_station):
+        action = SelectStation(station=sample_station)
         assert action.station is sample_station
-        assert action.arrivals is sample_arrivals
 
     def test_match_case_destructure(self, sample_station, sample_arrivals):
-        action = SelectStation(station=sample_station, arrivals=sample_arrivals)
+        action = SelectStation(station=sample_station)
         match action:
-            case SelectStation(station=s, arrivals=arr):
+            case SelectStation(station=s):
                 assert s.name == "Grand Army Plaza"
-                assert len(arr) == 4
             case _:
                 pytest.fail("match/case failed")
 
@@ -119,7 +117,6 @@ class TestSubwayScreen:
         action = screen.on_touch(TouchPoint(120, 30))
         assert isinstance(action, SelectStation)
         assert action.station.name == sample_stations[0].name
-        assert action.arrivals is sample_arrivals
 
     def test_touch_second_station(self, sample_stations):
         screen = SubwayScreen(sample_stations, [[], [], []])

@@ -75,10 +75,11 @@ class App:
                 self._push(self._load(epd, "Fetching weather…",
                     lambda: WeatherScreen(self.weather.fetch())), epd)
             case ShowSubway():
-                self._push(self._load(epd, "Finding stations…",
+                self._push(self._load(epd, "Getting arrivals…",
                     self._build_subway_screen), epd)
-            case SelectStation(station=s, arrivals=arr):
-                self._push(StationScreen(arr, s), epd)
+            case SelectStation(station=s):
+                self._push(self._load(epd, "Getting arrivals…",
+                    lambda: StationScreen(self.mta.fetch(s), s)), epd)
             case GoBack():
                 self._pop(epd)
 
