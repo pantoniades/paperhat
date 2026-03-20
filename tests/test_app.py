@@ -10,6 +10,7 @@ from ui import (
     GoBack,
     HomeScreen,
     MessageScreen,
+    Refresh,
     Screen,
     SelectStation,
     ShowSubway,
@@ -98,6 +99,12 @@ class TestDispatch:
 
         assert isinstance(app._screen, StationScreen)
 
+    def test_refresh_rerenders_current_screen(self, app, mock_epd):
+        mock_epd.show.reset_mock()
+        app._dispatch(Refresh(), mock_epd)
+        mock_epd.show.assert_called_once()
+        assert isinstance(app._screen, HomeScreen)  # didn't change screen
+
     def test_go_back(self, app, mock_epd, sample_weather):
         app.weather.fetch.return_value = sample_weather
         app._dispatch(ShowWeather(), mock_epd)
@@ -150,7 +157,7 @@ class TestFullNavigation:
     def test_home_to_subway_to_station_and_back_twice(
         self, app, mock_epd, sample_stations, sample_arrivals
     ):
-        app.mta.fetch_batch.return_value = [sample_arrivals, [], []]
+        app.mta.fetch_batch.return_value = [sample_arrivals] + [[] for _ in range(5)]
         app.mta.fetch.return_value = sample_arrivals
 
         # Home → Subway
@@ -171,7 +178,7 @@ class TestFullNavigation:
 
     def test_deep_stack_unwinds_correctly(self, app, mock_epd, sample_weather, sample_stations, sample_arrivals):
         app.weather.fetch.return_value = sample_weather
-        app.mta.fetch_batch.return_value = [sample_arrivals, [], []]
+        app.mta.fetch_batch.return_value = [sample_arrivals] + [[] for _ in range(5)]
         app.mta.fetch.return_value = sample_arrivals
 
         app._dispatch(ShowWeather(), mock_epd)

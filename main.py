@@ -20,6 +20,7 @@ from ui import (
     GoBack,
     HomeScreen,
     MessageScreen,
+    Refresh,
     Screen,
     SelectStation,
     ShowSubway,
@@ -38,7 +39,7 @@ class App:
     def __init__(self) -> None:
         self.weather = WeatherService()
         self.mta = MTAService()
-        self._nearby = StationFinder().nearest(APP.lat, APP.lon)
+        self._nearby = StationFinder().nearest(APP.lat, APP.lon, n=6)
         logger.info(
             "Cached %d nearby station(s): %s",
             len(self._nearby), ", ".join(s.name for s in self._nearby),
@@ -82,6 +83,8 @@ class App:
                     lambda: StationScreen(self.mta.fetch(s), s)), epd)
             case GoBack():
                 self._pop(epd)
+            case Refresh():
+                self._refresh(epd)
 
     def _build_subway_screen(self) -> SubwayScreen:
         arrivals = self.mta.fetch_batch(self._nearby)

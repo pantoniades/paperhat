@@ -67,7 +67,7 @@ class WeatherService:
                     temp=p["temperature"],
                     summary=p["shortForecast"],
                 )
-                for p in periods[1:4]
+                for p in periods[1:13]
             ],
         )
         self._cached_at = now

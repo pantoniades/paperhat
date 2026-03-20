@@ -15,7 +15,7 @@ class TestWeatherDataclasses:
     def test_weather_fields(self, sample_weather):
         assert sample_weather.temp == 72
         assert sample_weather.unit == "F"
-        assert len(sample_weather.hourly) == 3
+        assert len(sample_weather.hourly) == 12
 
 
 class TestWeatherService:
@@ -30,20 +30,20 @@ class TestWeatherService:
         assert isinstance(result, Weather)
         assert result.temp == 45
         assert result.unit == "F"
-        assert result.summary == "Mostly Sunny"
+        assert result.summary == "Cloudy"
         assert result.wind == "7 mph SW"
 
     @responses.activate
-    def test_fetch_hourly_has_three_entries(self, nws_points_response, nws_forecast_response):
+    def test_fetch_hourly_entries(self, nws_points_response, nws_forecast_response):
         responses.get("https://api.weather.gov/points/40.6742,-73.9708", json=nws_points_response)
         responses.get(nws_points_response["properties"]["forecastHourly"], json=nws_forecast_response)
 
         result = WeatherService().fetch()
 
-        assert len(result.hourly) == 3
+        assert len(result.hourly) == 12
         assert all(isinstance(h, HourForecast) for h in result.hourly)
         assert result.hourly[0].time == "11:00"
-        assert result.hourly[0].temp == 47
+        assert result.hourly[0].temp == 46
 
     @responses.activate
     def test_forecast_url_is_cached(self, nws_points_response, nws_forecast_response):

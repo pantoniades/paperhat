@@ -30,7 +30,7 @@ class TestRenderedImagesAreValidForEPD:
         self._assert_valid_buffer(WeatherScreen(sample_weather).render())
 
     def test_subway_screen(self, sample_stations):
-        self._assert_valid_buffer(SubwayScreen(sample_stations, [[], [], []]).render())
+        self._assert_valid_buffer(SubwayScreen(sample_stations, [[] for _ in sample_stations]).render())
 
     def test_station_screen(self, sample_arrivals, sample_station):
         self._assert_valid_buffer(StationScreen(sample_arrivals, sample_station).render())
@@ -74,7 +74,7 @@ class TestTouchToActionFlow:
 
     def test_no_action_on_dead_zone(self, sample_weather):
         screen = WeatherScreen(sample_weather)
-        assert screen.on_touch(TouchPoint(200, 80)) is None
+        assert screen.on_touch(TouchPoint(150, 80)) is None
 
 
 class TestFullRoundTrip:
@@ -90,7 +90,7 @@ class TestFullRoundTrip:
         ):
             MockWeather.return_value.fetch.return_value = sample_weather
             MockFinder.return_value.nearest.return_value = sample_stations
-            MockMTA.return_value.fetch_batch.return_value = [sample_arrivals, [], []]
+            MockMTA.return_value.fetch_batch.return_value = [sample_arrivals] + [[] for _ in range(5)]
             MockMTA.return_value.fetch.return_value = sample_arrivals
 
             from main import App

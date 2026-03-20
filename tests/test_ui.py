@@ -15,6 +15,7 @@ from ui import (
     HomeScreen,
     MessageScreen,
     Rect,
+    Refresh,
     Screen,
     SelectStation,
     ShowSubway,
@@ -102,35 +103,63 @@ class TestWeatherScreen:
         assert isinstance(WeatherScreen(sample_weather).on_touch(TouchPoint(15, 10)), GoBack)
 
     def test_touch_elsewhere_returns_none(self, sample_weather):
-        assert WeatherScreen(sample_weather).on_touch(TouchPoint(200, 100)) is None
+        assert WeatherScreen(sample_weather).on_touch(TouchPoint(150, 100)) is None
+
+    def test_has_multiple_pages(self, sample_weather):
+        screen = WeatherScreen(sample_weather)
+        assert screen._total >= 2
+
+    def test_page_down(self, sample_weather):
+        screen = WeatherScreen(sample_weather)
+        action = screen.on_touch(TouchPoint(220, 100))
+        assert isinstance(action, Refresh)
+        assert screen.page == 1
 
 
 class TestSubwayScreen:
     def test_render_size_and_mode(self, sample_stations):
-        _assert_valid_screen_image(SubwayScreen(sample_stations, [[], [], []]).render())
+        _assert_valid_screen_image(SubwayScreen(sample_stations, [[] for _ in sample_stations]).render())
 
     def test_touch_back(self, sample_stations):
-        assert isinstance(SubwayScreen(sample_stations, [[], [], []]).on_touch(TouchPoint(15, 10)), GoBack)
+        assert isinstance(SubwayScreen(sample_stations, [[] for _ in sample_stations]).on_touch(TouchPoint(15, 10)), GoBack)
 
     def test_touch_first_station(self, sample_stations, sample_arrivals):
-        screen = SubwayScreen(sample_stations, [sample_arrivals, [], []])
+        arrs = [sample_arrivals] + [[] for _ in sample_stations[1:]]
+        screen = SubwayScreen(sample_stations, arrs)
         action = screen.on_touch(TouchPoint(120, 30))
         assert isinstance(action, SelectStation)
         assert action.station.name == sample_stations[0].name
 
     def test_touch_second_station(self, sample_stations):
-        screen = SubwayScreen(sample_stations, [[], [], []])
+        screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
         y = screen._TOP + screen._ROW_H + 5
         action = screen.on_touch(TouchPoint(120, y))
         assert isinstance(action, SelectStation)
         assert action.station.name == sample_stations[1].name
 
     def test_touch_outside_zones(self, sample_stations):
-        assert SubwayScreen(sample_stations, [[], [], []]).on_touch(TouchPoint(120, 120)) is None
+        assert SubwayScreen(sample_stations, [[] for _ in sample_stations]).on_touch(TouchPoint(120, 120)) is None
 
-    def test_zones_match_station_count(self, sample_stations):
-        screen = SubwayScreen(sample_stations, [[], [], []])
-        assert len(screen._zones) == len(sample_stations)
+    def test_has_two_pages_for_six_stations(self, sample_stations):
+        screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
+        assert screen._total == 2
+
+    def test_page_down_returns_refresh(self, sample_stations):
+        screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
+        action = screen.on_touch(TouchPoint(220, 100))  # bottom-right
+        assert isinstance(action, Refresh)
+        assert screen.page == 1
+
+    def test_page_up_from_page_1(self, sample_stations):
+        screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
+        screen.page = 1
+        action = screen.on_touch(TouchPoint(220, 20))  # top-right
+        assert isinstance(action, Refresh)
+        assert screen.page == 0
+
+    def test_page_up_on_first_page_is_none(self, sample_stations):
+        screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
+        assert screen.on_touch(TouchPoint(220, 20)) is None  # already on page 0
 
 
 class TestStationScreen:

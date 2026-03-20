@@ -87,9 +87,8 @@ def sample_weather() -> Weather:
         summary="Partly Cloudy",
         wind="5 mph NW",
         hourly=[
-            HourForecast(time="14:00", temp=70, summary="Mostly Cloudy"),
-            HourForecast(time="15:00", temp=68, summary="Cloudy"),
-            HourForecast(time="16:00", temp=65, summary="Rain"),
+            HourForecast(time=f"{h}:00", temp=72 - i, summary="Cloudy")
+            for i, h in enumerate(range(14, 26))
         ],
     )
 
@@ -109,27 +108,18 @@ def sample_station() -> Station:
 @pytest.fixture()
 def sample_stations() -> list[Station]:
     return [
-        Station(
-            name="Grand Army Plaza",
-            lat=40.6752,
-            lon=-73.9709,
-            stops=[StopInfo("239", ("2", "3"), "Manhattan", "Flatbush")],
-            distance_m=116.0,
-        ),
-        Station(
-            name="7 Av",
-            lat=40.6772,
-            lon=-73.9726,
-            stops=[StopInfo("D25", ("B", "Q"), "Manhattan", "Coney Island")],
-            distance_m=343.0,
-        ),
-        Station(
-            name="Eastern Pkwy-Brooklyn Museum",
-            lat=40.6720,
-            lon=-73.9642,
-            stops=[StopInfo("238", ("2", "3"), "Manhattan", "Outbound")],
-            distance_m=595.0,
-        ),
+        Station(name="Grand Army Plaza", lat=40.6752, lon=-73.9709,
+                stops=[StopInfo("239", ("2", "3"), "Manhattan", "Flatbush")], distance_m=116.0),
+        Station(name="7 Av", lat=40.6772, lon=-73.9726,
+                stops=[StopInfo("D25", ("B", "Q"), "Manhattan", "Coney Island")], distance_m=343.0),
+        Station(name="Eastern Pkwy-Brooklyn Museum", lat=40.6720, lon=-73.9642,
+                stops=[StopInfo("238", ("2", "3"), "Manhattan", "Outbound")], distance_m=595.0),
+        Station(name="Bergen St", lat=40.6809, lon=-73.9753,
+                stops=[StopInfo("237", ("2", "3"), "Manhattan", "Flatbush")], distance_m=650.0),
+        Station(name="Prospect Park", lat=40.6616, lon=-73.9622,
+                stops=[StopInfo("D26", ("B", "Q", "S"), "Manhattan", "Coney Island")], distance_m=800.0),
+        Station(name="Atlantic Av-Barclays Ctr", lat=40.6844, lon=-73.9787,
+                stops=[StopInfo("D24", ("B", "D", "N", "Q", "R"), "Manhattan", "Coney Island")], distance_m=900.0),
     ]
 
 
@@ -160,44 +150,18 @@ def nws_points_response() -> dict:
 
 @pytest.fixture()
 def nws_forecast_response() -> dict:
-    return {
-        "properties": {
-            "periods": [
-                {
-                    "startTime": "2026-03-20T10:00:00-04:00",
-                    "temperature": 45,
-                    "temperatureUnit": "F",
-                    "shortForecast": "Mostly Sunny",
-                    "windSpeed": "7 mph",
-                    "windDirection": "SW",
-                },
-                {
-                    "startTime": "2026-03-20T11:00:00-04:00",
-                    "temperature": 47,
-                    "temperatureUnit": "F",
-                    "shortForecast": "Partly Sunny",
-                    "windSpeed": "8 mph",
-                    "windDirection": "SW",
-                },
-                {
-                    "startTime": "2026-03-20T12:00:00-04:00",
-                    "temperature": 50,
-                    "temperatureUnit": "F",
-                    "shortForecast": "Cloudy",
-                    "windSpeed": "9 mph",
-                    "windDirection": "W",
-                },
-                {
-                    "startTime": "2026-03-20T13:00:00-04:00",
-                    "temperature": 53,
-                    "temperatureUnit": "F",
-                    "shortForecast": "Rain",
-                    "windSpeed": "10 mph",
-                    "windDirection": "W",
-                },
-            ]
+    periods = [
+        {
+            "startTime": f"2026-03-20T{10 + i}:00:00-04:00",
+            "temperature": 45 + i,
+            "temperatureUnit": "F",
+            "shortForecast": "Cloudy",
+            "windSpeed": f"{7 + i} mph",
+            "windDirection": "SW",
         }
-    }
+        for i in range(14)  # current + 13 hourly
+    ]
+    return {"properties": {"periods": periods}}
 
 
 # ── MTA station API response fixture ───────────────────────────
