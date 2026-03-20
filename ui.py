@@ -37,7 +37,7 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-LG, MD, SM = _font(18), _font(13), _font(11)
+XL, LG, MD, SM = _font(28), _font(18), _font(13), _font(11)
 
 # ── touch zones ─────────────────────────────────────────────────
 
@@ -203,10 +203,14 @@ def _weather_icon(summary: str) -> str:
 
 
 class HomeScreen(Screen):
-    """Two tappable icons: Weather (left) · Subway (right)."""
+    """Two tappable icons: Weather (left, live conditions) · Subway (right)."""
 
     _LEFT = Rect(0, 0, SCREEN_W // 2, SCREEN_H)
     _RIGHT = Rect(SCREEN_W // 2, 0, SCREEN_W // 2, SCREEN_H)
+
+    def __init__(self, summary: str = "", high_low: str = "Weather") -> None:
+        self._icon = _weather_icon(summary) if summary else "☀"
+        self._temps = high_low
 
     def render(self) -> Image.Image:
         img, draw = self._canvas()
@@ -214,16 +218,10 @@ class HomeScreen(Screen):
 
         draw.line([(mid, 8), (mid, SCREEN_H - 8)], fill=0)
 
-        # sun icon
-        cx, cy, r = mid // 2, SCREEN_H // 2 - 12, 16
-        draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=0, width=2)
-        for deg in range(0, 360, 45):
-            a = math.radians(deg)
-            draw.line([
-                (cx + int((r + 5) * math.cos(a)), cy + int((r + 5) * math.sin(a))),
-                (cx + int((r + 11) * math.cos(a)), cy + int((r + 11) * math.sin(a))),
-            ], fill=0, width=2)
-        draw.text((cx, cy + r + 18), "Weather", font=MD, fill=0, anchor="mt")
+        # live weather icon + today's high/low
+        cx, cy = mid // 2, SCREEN_H // 2 - 10
+        draw.text((cx, cy), self._icon, font=XL, fill=0, anchor="mm")
+        draw.text((cx, cy + 28), self._temps, font=MD, fill=0, anchor="mt")
 
         # subway icon (circle with S)
         sx, sy, sr = mid + mid // 2, SCREEN_H // 2 - 10, 20

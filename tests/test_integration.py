@@ -98,6 +98,7 @@ class TestFullRoundTrip:
             patch("main.MTAService") as MockMTA,
         ):
             MockWeather.return_value.fetch.return_value = sample_weather
+            MockWeather.return_value.fetch_weekly.return_value = []
             MockFinder.return_value.nearest.return_value = sample_stations
             MockMTA.return_value.fetch_batch.return_value = [sample_arrivals] + [[] for _ in range(5)]
             MockMTA.return_value.fetch.return_value = sample_arrivals

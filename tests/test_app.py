@@ -32,13 +32,15 @@ def mock_epd():
 
 
 @pytest.fixture()
-def app(sample_stations):
+def app(sample_stations, sample_weather):
     with (
-        patch("main.WeatherService"),
+        patch("main.WeatherService") as MockWeather,
         patch("main.StationFinder") as MockFinder,
         patch("main.MTAService"),
     ):
         MockFinder.return_value.nearest.return_value = sample_stations
+        MockWeather.return_value.fetch.return_value = sample_weather
+        MockWeather.return_value.fetch_weekly.return_value = []
         from main import App
 
         return App()

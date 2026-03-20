@@ -85,10 +85,13 @@ def _assert_valid_screen_image(img: Image.Image) -> None:
 
 class TestHomeScreen:
     def test_render_size_and_mode(self):
+        _assert_valid_screen_image(HomeScreen("Sunny", "72/58").render())
+
+    def test_render_defaults(self):
         _assert_valid_screen_image(HomeScreen().render())
 
     def test_render_has_content(self):
-        img = HomeScreen().render()
+        img = HomeScreen("Cloudy", "60/45").render()
         colors = img.getcolors()
         assert len(colors) == 2  # both black and white pixels
 

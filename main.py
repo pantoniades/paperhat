@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import signal
 import sys
+import threading
 import time
 from typing import Callable
 
@@ -36,6 +37,8 @@ from ui import (
 
 logger = logging.getLogger(__name__)
 
+_WEATHER_REFRESH = 2 * 3600  # 2 hours
+
 
 class App:
     """Screen state machine with a navigation stack."""
@@ -48,8 +51,14 @@ class App:
             "Cached %d nearby station(s): %s",
             len(self._nearby), ", ".join(s.name for s in self._nearby),
         )
-        self._screen: Screen = HomeScreen()
+
+        # Pre-fetch weather for the home screen
+        self._home_summary, self._home_temps = self._fetch_home_weather()
+        self._screen: Screen = self._make_home()
         self._stack: list[Screen] = []
+
+        # Background refresh every 2h (daemon thread dies with main)
+        threading.Thread(target=self._weather_bg_loop, daemon=True).start()
 
     def run(self) -> None:
         with EPD() as epd, TouchPanel() as touch:
@@ -71,6 +80,33 @@ class App:
                 if action is not None:
                     self._dispatch(action, epd)
                     touch.flush()  # wait for finger lift before next event
+
+    # ── home screen weather ─────────────────────────────────────
+
+    def _fetch_home_weather(self) -> tuple[str, str]:
+        """Return (summary, high/low) for the home screen."""
+        try:
+            w = self.weather.fetch()
+            wk = self.weather.fetch_weekly()
+            today = wk[0] if wk else None
+            temps = (
+                f"{today.high}/{today.low}"
+                if today and today.low is not None
+                else f"{w.temp}°"
+            )
+            return w.summary, temps
+        except Exception:
+            logger.warning("Could not fetch home weather", exc_info=True)
+            return "", "Weather"
+
+    def _make_home(self) -> HomeScreen:
+        return HomeScreen(summary=self._home_summary, high_low=self._home_temps)
+
+    def _weather_bg_loop(self) -> None:
+        while True:
+            time.sleep(_WEATHER_REFRESH)
+            self._home_summary, self._home_temps = self._fetch_home_weather()
+            logger.info("Background weather refresh done")
 
     # ── navigation ──────────────────────────────────────────────
 
@@ -123,7 +159,10 @@ class App:
         self._refresh(epd)
 
     def _pop(self, epd: EPD) -> None:
-        self._screen = self._stack.pop() if self._stack else HomeScreen()
+        if self._stack:
+            self._screen = self._stack.pop()
+        else:
+            self._screen = self._make_home()
         logger.info("← %s (stack depth %d)", type(self._screen).__name__, len(self._stack))
         self._refresh(epd)
 
