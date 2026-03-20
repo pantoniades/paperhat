@@ -73,10 +73,12 @@ class TouchPanel:
         points: list[TouchPoint] = []
         if ready and 0 < n_points <= 5:
             data = self._i2c_read(self._POINTS, n_points * 8)
+            logger.info("touch status=0x%02X n=%d data=%s", status, n_points, data[:16])
             for i in range(n_points):
                 off = i * 8
                 raw_x = data[off + 1] | (data[off + 2] << 8)
                 raw_y = data[off + 3] | (data[off + 4] << 8)
+                logger.info("touch raw=(%d, %d)", raw_x, raw_y)
                 points.append(self._map(raw_x, raw_y))
 
         if ready:
