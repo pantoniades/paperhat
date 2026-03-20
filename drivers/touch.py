@@ -40,9 +40,12 @@ class TouchPanel:
             points = touch.wait(timeout=5)
     """
 
-    # GT1151 16-bit register addresses
+    # GT1151 / Goodix 16-bit register addresses
     _STATUS = [0x81, 0x4E]
     _POINTS = [0x81, 0x50]
+    _PRODUCT_ID = [0x81, 0x40]   # 4 bytes ASCII
+    _FIRMWARE = [0x81, 0x44]     # 2 bytes LE
+    _CONFIG = [0x80, 0x47]       # config area (version, x_max, y_max, …)
 
     def __enter__(self) -> Self:
         if GPIO is None:
@@ -53,6 +56,7 @@ class TouchPanel:
         GPIO.setup(HW.touch_int, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         self._reset()
         self.bus = smbus2.SMBus(HW.i2c_bus)
+        self._log_device_info()
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -97,6 +101,31 @@ class TouchPanel:
             time.sleep(0.05)
 
     # ── internals ───────────────────────────────────────────────
+
+    def _log_device_info(self) -> None:
+        """Read and log touch controller identity and configuration."""
+        try:
+            # Product ID (4 bytes ASCII, e.g. "911\0" or "1151")
+            pid_raw = self._i2c_read(self._PRODUCT_ID, 4)
+            product_id = bytes(pid_raw).decode("ascii", errors="replace").rstrip("\x00")
+
+            # Firmware version (2 bytes little-endian)
+            fw = self._i2c_read(self._FIRMWARE, 2)
+            fw_ver = fw[0] | (fw[1] << 8)
+
+            # Config area: version (1 byte), x_max (2 LE), y_max (2 LE)
+            cfg = self._i2c_read(self._CONFIG, 5)
+            cfg_ver = cfg[0]
+            x_max = cfg[1] | (cfg[2] << 8)
+            y_max = cfg[3] | (cfg[4] << 8)
+
+            logger.info(
+                "Touch IC: product=%r fw=0x%04X config_ver=%d "
+                "x_max=%d y_max=%d i2c_addr=0x%02X",
+                product_id, fw_ver, cfg_ver, x_max, y_max, HW.touch_addr,
+            )
+        except Exception:
+            logger.warning("Could not read touch device info", exc_info=True)
 
     def _reset(self) -> None:
         GPIO.output(HW.touch_rst, 1)
