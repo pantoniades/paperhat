@@ -28,12 +28,13 @@ def mock_epd():
 
 
 @pytest.fixture()
-def app():
+def app(sample_stations):
     with (
         patch("main.WeatherService"),
-        patch("main.StationFinder"),
+        patch("main.StationFinder") as MockFinder,
         patch("main.MTAService"),
     ):
+        MockFinder.return_value.nearest.return_value = sample_stations
         from main import App
 
         return App()
@@ -84,8 +85,7 @@ class TestDispatch:
         assert isinstance(app._screen, WeatherScreen)
         assert len(app._stack) == 1
 
-    def test_show_subway(self, app, mock_epd, sample_stations):
-        app.stations.nearest.return_value = sample_stations
+    def test_show_subway(self, app, mock_epd):
         app.mta.fetch_batch.return_value = [[], [], []]
         app._dispatch(ShowSubway(), mock_epd)
 
@@ -149,7 +149,6 @@ class TestFullNavigation:
     def test_home_to_subway_to_station_and_back_twice(
         self, app, mock_epd, sample_stations, sample_arrivals
     ):
-        app.stations.nearest.return_value = sample_stations
         app.mta.fetch_batch.return_value = [sample_arrivals, [], []]
 
         # Home → Subway
@@ -170,7 +169,6 @@ class TestFullNavigation:
 
     def test_deep_stack_unwinds_correctly(self, app, mock_epd, sample_weather, sample_stations, sample_arrivals):
         app.weather.fetch.return_value = sample_weather
-        app.stations.nearest.return_value = sample_stations
         app.mta.fetch_batch.return_value = [sample_arrivals, [], []]
 
         app._dispatch(ShowWeather(), mock_epd)

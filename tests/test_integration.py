@@ -94,8 +94,9 @@ class TestFullRoundTrip:
 
             from main import App
 
-            app = App()
+            a = App()
             epd = MagicMock()
+            app = a  # rename for clarity below
 
             # Start at home
             assert isinstance(app._screen, HomeScreen)

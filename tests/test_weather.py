@@ -57,8 +57,8 @@ class TestWeatherService:
 
         points_calls = [c for c in responses.calls if "/points/" in c.request.url]
         forecast_calls = [c for c in responses.calls if "/forecast/" in c.request.url]
-        assert len(points_calls) == 1  # cached after first call
-        assert len(forecast_calls) == 2
+        assert len(points_calls) == 1  # forecast URL cached
+        assert len(forecast_calls) == 1  # weather result cached for 30m
 
     @responses.activate
     def test_fetch_raises_on_api_failure(self):

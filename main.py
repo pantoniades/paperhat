@@ -37,8 +37,12 @@ class App:
 
     def __init__(self) -> None:
         self.weather = WeatherService()
-        self.stations = StationFinder()
         self.mta = MTAService()
+        self._nearby = StationFinder().nearest(APP.lat, APP.lon)
+        logger.info(
+            "Cached %d nearby station(s): %s",
+            len(self._nearby), ", ".join(s.name for s in self._nearby),
+        )
         self._screen: Screen = HomeScreen()
         self._stack: list[Screen] = []
 
@@ -79,13 +83,8 @@ class App:
                 self._pop(epd)
 
     def _build_subway_screen(self) -> SubwayScreen:
-        nearby = self.stations.nearest(APP.lat, APP.lon)
-        arrivals = self.mta.fetch_batch(nearby)
-        logger.info(
-            "Loaded %d station(s): %s",
-            len(nearby), ", ".join(s.name for s in nearby),
-        )
-        return SubwayScreen(nearby, arrivals)
+        arrivals = self.mta.fetch_batch(self._nearby)
+        return SubwayScreen(self._nearby, arrivals)
 
     def _push(self, screen: Screen, epd: EPD) -> None:
         self._stack.append(self._screen)

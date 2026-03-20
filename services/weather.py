@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 
 import requests
 
 from config import APP
+
+logger = logging.getLogger(__name__)
+
+_CACHE_TTL = 30 * 60  # 30 minutes
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,19 +41,26 @@ class WeatherService:
     def __init__(self) -> None:
         self._headers = {"User-Agent": f"({APP.nws_agent})"}
         self._forecast_url: str | None = None
+        self._cached: Weather | None = None
+        self._cached_at: float = 0.0
 
     def fetch(self) -> Weather:
+        now = time.monotonic()
+        if self._cached and (now - self._cached_at) < _CACHE_TTL:
+            logger.debug("Weather cache hit (age %.0fs)", now - self._cached_at)
+            return self._cached
+
         url = self._resolve_forecast_url()
         periods = (
             requests.get(url, headers=self._headers, timeout=10)
             .json()["properties"]["periods"]
         )
-        now = periods[0]
-        return Weather(
-            temp=now["temperature"],
-            unit=now["temperatureUnit"],
-            summary=now["shortForecast"],
-            wind=f"{now['windSpeed']} {now['windDirection']}",
+        cur = periods[0]
+        self._cached = Weather(
+            temp=cur["temperature"],
+            unit=cur["temperatureUnit"],
+            summary=cur["shortForecast"],
+            wind=f"{cur['windSpeed']} {cur['windDirection']}",
             hourly=[
                 HourForecast(
                     time=p["startTime"][11:16],
@@ -57,6 +70,9 @@ class WeatherService:
                 for p in periods[1:4]
             ],
         )
+        self._cached_at = now
+        logger.info("Weather fetched and cached for %dm", _CACHE_TTL // 60)
+        return self._cached
 
     def _resolve_forecast_url(self) -> str:
         if self._forecast_url is None:
