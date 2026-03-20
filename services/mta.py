@@ -7,6 +7,7 @@ Real-time arrivals come from GTFS-RT protobuf feeds (no key required).
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from math import atan2, cos, radians, sin, sqrt
@@ -14,6 +15,8 @@ from pathlib import Path
 
 import requests
 from google.transit import gtfs_realtime_pb2
+
+logger = logging.getLogger(__name__)
 
 # ── GTFS-RT feed URLs (one per line group) ──────────────────────
 
@@ -157,14 +160,32 @@ class StationFinder:
 
 
 class MTAService:
-    """Fetches live arrivals for a Station from the relevant GTFS-RT feeds."""
+    """Fetches live arrivals from GTFS-RT feeds."""
 
     def fetch(self, station: Station) -> list[Arrival]:
-        feed_keys = {_ROUTE_FEED[r] for s in station.stops for r in s.routes if r in _ROUTE_FEED}
-        target_ids = {f"{s.gtfs_id}{d}" for s in station.stops for d in ("N", "S")}
+        """Arrivals for a single station."""
+        return self.fetch_batch([station])[0]
+
+    def fetch_batch(self, stations: list[Station]) -> list[list[Arrival]]:
+        """Arrivals for multiple stations, querying each feed at most once."""
+        # map base stop id → which station indices it belongs to
+        stop_to_idx: dict[str, list[int]] = {}
+        feed_keys: set[str] = set()
+        target_ids: set[str] = set()
+
+        for idx, station in enumerate(stations):
+            for stop in station.stops:
+                for d in ("N", "S"):
+                    target_ids.add(f"{stop.gtfs_id}{d}")
+                stop_to_idx.setdefault(stop.gtfs_id, []).append(idx)
+                for route in stop.routes:
+                    if route in _ROUTE_FEED:
+                        feed_keys.add(_ROUTE_FEED[route])
+
+        logger.info("Querying %d feed(s) for %d station(s)", len(feed_keys), len(stations))
 
         now = time.time()
-        arrivals: list[Arrival] = []
+        results: list[list[Arrival]] = [[] for _ in stations]
 
         for key in feed_keys:
             url = _FEEDS.get(key)
@@ -174,6 +195,7 @@ class MTAService:
                 feed = gtfs_realtime_pb2.FeedMessage()
                 feed.ParseFromString(requests.get(url, timeout=15).content)
             except Exception:
+                logger.warning("Failed to fetch feed %s", key, exc_info=True)
                 continue
 
             for entity in feed.entity:
@@ -181,15 +203,20 @@ class MTAService:
                     continue
                 route = entity.trip_update.trip.route_id
                 for stu in entity.trip_update.stop_time_update:
-                    if stu.stop_id in target_ids and stu.arrival.time > now:
-                        arrivals.append(Arrival(
-                            line=route,
-                            direction="N" if stu.stop_id[-1] == "N" else "S",
-                            minutes=int((stu.arrival.time - now) / 60),
-                        ))
+                    if stu.stop_id not in target_ids or stu.arrival.time <= now:
+                        continue
+                    base_id = stu.stop_id[:-1]
+                    arrival = Arrival(
+                        line=route,
+                        direction="N" if stu.stop_id[-1] == "N" else "S",
+                        minutes=int((stu.arrival.time - now) / 60),
+                    )
+                    for si in stop_to_idx.get(base_id, []):
+                        results[si].append(arrival)
 
-        arrivals.sort(key=lambda a: a.minutes)
-        return arrivals
+        for arr_list in results:
+            arr_list.sort(key=lambda a: a.minutes)
+        return results
 
 
 # ── helpers ─────────────────────────────────────────────────────

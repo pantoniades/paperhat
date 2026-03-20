@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -70,6 +71,7 @@ class SelectStation:
     """Navigate to arrivals for a specific station."""
 
     station: Station
+    arrivals: list[Arrival]
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +108,20 @@ def _back_arrow(draw: ImageDraw.ImageDraw) -> None:
 
 def _hline(draw: ImageDraw.ImageDraw, y: int) -> None:
     draw.line([(10, y), (SCREEN_W - 10, y)], fill=0)
+
+
+def _clock(minutes: int) -> str:
+    """Convert minutes-from-now to a clock time like '11:40'."""
+    t = datetime.now() + timedelta(minutes=minutes)
+    return t.strftime("%H:%M")
+
+
+def _next_arrival(arrivals: list[Arrival], direction: str) -> Arrival | None:
+    """First arrival in the given direction, or None."""
+    for a in arrivals:
+        if a.direction == direction:
+            return a
+    return None
 
 
 # ── HomeScreen ──────────────────────────────────────────────────
@@ -186,13 +202,14 @@ class WeatherScreen(Screen):
 
 
 class SubwayScreen(Screen):
-    """Lists the three closest stations; tap one to see arrivals."""
+    """Lists the three closest stations with next arrival times."""
 
     _ROW_H = 30
     _TOP = 26  # y where station rows begin
 
-    def __init__(self, stations: list[Station]) -> None:
+    def __init__(self, stations: list[Station], arrivals: list[list[Arrival]]) -> None:
         self.stations = stations
+        self.arrivals = arrivals  # parallel to stations
         self._zones = [
             Rect(0, self._TOP + i * self._ROW_H, SCREEN_W, self._ROW_H)
             for i in range(len(stations))
@@ -207,16 +224,22 @@ class SubwayScreen(Screen):
         for i, station in enumerate(self.stations):
             y = self._TOP + i * self._ROW_H
             draw.text((14, y + 2), station.name, font=MD, fill=0)
-            routes_str = "  ".join(station.routes)
-            draw.text((14, y + 16), routes_str, font=SM, fill=0)
+
+            # routes + next N/S arrival as clock times
+            routes_str = ",".join(station.routes)
+            parts = [routes_str]
+            for direction, arrow in (("N", "↑"), ("S", "↓")):
+                nxt = _next_arrival(self.arrivals[i], direction)
+                parts.append(f"{arrow}{_clock(nxt.minutes)}" if nxt else f"{arrow}—")
+            draw.text((14, y + 16), "  ".join(parts), font=SM, fill=0)
         return img
 
     def on_touch(self, pt: TouchPoint) -> Action | None:
         if _BACK_ZONE.contains(pt):
             return GoBack()
-        for zone, station in zip(self._zones, self.stations):
+        for i, zone in enumerate(self._zones):
             if zone.contains(pt):
-                return SelectStation(station)
+                return SelectStation(self.stations[i], self.arrivals[i])
         return None
 
 
@@ -261,8 +284,8 @@ class StationScreen(Screen):
             return y + 14
 
         x = 14
-        for arr in arrivals[:6]:
-            token = f"{arr.line} {arr.minutes}m"
+        for arr in arrivals[:3]:
+            token = f"{arr.line} {_clock(arr.minutes)}"
             bbox = draw.textbbox((0, 0), token, font=SM)
             tw = bbox[2] - bbox[0]
             if x + tw > SCREEN_W - 10:

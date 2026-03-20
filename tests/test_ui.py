@@ -52,15 +52,17 @@ class TestActions:
     def test_show_weather_has_slots(self):
         assert not hasattr(ShowWeather(), "__dict__")
 
-    def test_select_station_holds_station(self, sample_station):
-        action = SelectStation(station=sample_station)
+    def test_select_station_holds_data(self, sample_station, sample_arrivals):
+        action = SelectStation(station=sample_station, arrivals=sample_arrivals)
         assert action.station is sample_station
+        assert action.arrivals is sample_arrivals
 
-    def test_match_case_destructure(self, sample_station):
-        action = SelectStation(station=sample_station)
+    def test_match_case_destructure(self, sample_station, sample_arrivals):
+        action = SelectStation(station=sample_station, arrivals=sample_arrivals)
         match action:
-            case SelectStation(station=s):
+            case SelectStation(station=s, arrivals=arr):
                 assert s.name == "Grand Army Plaza"
+                assert len(arr) == 4
             case _:
                 pytest.fail("match/case failed")
 
@@ -107,29 +109,30 @@ class TestWeatherScreen:
 
 class TestSubwayScreen:
     def test_render_size_and_mode(self, sample_stations):
-        _assert_valid_screen_image(SubwayScreen(sample_stations).render())
+        _assert_valid_screen_image(SubwayScreen(sample_stations, [[], [], []]).render())
 
     def test_touch_back(self, sample_stations):
-        assert isinstance(SubwayScreen(sample_stations).on_touch(TouchPoint(15, 10)), GoBack)
+        assert isinstance(SubwayScreen(sample_stations, [[], [], []]).on_touch(TouchPoint(15, 10)), GoBack)
 
-    def test_touch_first_station(self, sample_stations):
-        screen = SubwayScreen(sample_stations)
+    def test_touch_first_station(self, sample_stations, sample_arrivals):
+        screen = SubwayScreen(sample_stations, [sample_arrivals, [], []])
         action = screen.on_touch(TouchPoint(120, 30))
         assert isinstance(action, SelectStation)
         assert action.station.name == sample_stations[0].name
+        assert action.arrivals is sample_arrivals
 
     def test_touch_second_station(self, sample_stations):
-        screen = SubwayScreen(sample_stations)
+        screen = SubwayScreen(sample_stations, [[], [], []])
         y = screen._TOP + screen._ROW_H + 5
         action = screen.on_touch(TouchPoint(120, y))
         assert isinstance(action, SelectStation)
         assert action.station.name == sample_stations[1].name
 
     def test_touch_outside_zones(self, sample_stations):
-        assert SubwayScreen(sample_stations).on_touch(TouchPoint(120, 120)) is None
+        assert SubwayScreen(sample_stations, [[], [], []]).on_touch(TouchPoint(120, 120)) is None
 
     def test_zones_match_station_count(self, sample_stations):
-        screen = SubwayScreen(sample_stations)
+        screen = SubwayScreen(sample_stations, [[], [], []])
         assert len(screen._zones) == len(sample_stations)
 
 

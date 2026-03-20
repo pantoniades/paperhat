@@ -6,6 +6,7 @@ on a Waveshare 2.13" Touch e-Paper HAT (250×122, B/W).
 
 from __future__ import annotations
 
+import logging
 import signal
 import sys
 import time
@@ -28,6 +29,8 @@ from ui import (
     WeatherScreen,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class App:
     """Screen state machine with a navigation stack."""
@@ -43,11 +46,20 @@ class App:
         with EPD() as epd, TouchPanel() as touch:
             epd.clear()
             self._refresh(epd)
+            logger.info("Ready — showing home screen")
 
             while True:
                 if not (points := touch.wait(timeout=30)):
                     continue
-                if (action := self._screen.on_touch(points[0])) is not None:
+                pt = points[0]
+                action = self._screen.on_touch(pt)
+                logger.info(
+                    "Touch (%d, %d) on %s → %s",
+                    pt.x, pt.y,
+                    type(self._screen).__name__,
+                    type(action).__name__ if action else "None",
+                )
+                if action is not None:
                     self._dispatch(action, epd)
                     time.sleep(0.3)
 
@@ -60,21 +72,30 @@ class App:
                     lambda: WeatherScreen(self.weather.fetch())), epd)
             case ShowSubway():
                 self._push(self._load(epd, "Finding stations…",
-                    lambda: SubwayScreen(
-                        self.stations.nearest(APP.lat, APP.lon))), epd)
-            case SelectStation(station=s):
-                self._push(self._load(epd, "Fetching arrivals…",
-                    lambda: StationScreen(self.mta.fetch(s), s)), epd)
+                    self._build_subway_screen), epd)
+            case SelectStation(station=s, arrivals=arr):
+                self._push(StationScreen(arr, s), epd)
             case GoBack():
                 self._pop(epd)
+
+    def _build_subway_screen(self) -> SubwayScreen:
+        nearby = self.stations.nearest(APP.lat, APP.lon)
+        arrivals = self.mta.fetch_batch(nearby)
+        logger.info(
+            "Loaded %d station(s): %s",
+            len(nearby), ", ".join(s.name for s in nearby),
+        )
+        return SubwayScreen(nearby, arrivals)
 
     def _push(self, screen: Screen, epd: EPD) -> None:
         self._stack.append(self._screen)
         self._screen = screen
+        logger.info("→ %s (stack depth %d)", type(screen).__name__, len(self._stack))
         self._refresh(epd)
 
     def _pop(self, epd: EPD) -> None:
         self._screen = self._stack.pop() if self._stack else HomeScreen()
+        logger.info("← %s (stack depth %d)", type(self._screen).__name__, len(self._stack))
         self._refresh(epd)
 
     def _refresh(self, epd: EPD) -> None:
@@ -87,14 +108,21 @@ class App:
         try:
             return build()
         except Exception as exc:
+            logger.error("Load failed: %s", exc, exc_info=True)
             return MessageScreen(str(exc)[:50], show_back=True)
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
     app = App()
 
     def _quit(sig: int, _: object) -> None:
-        print(f"\nSignal {sig} — shutting down")
+        logger.info("Signal %d — shutting down", sig)
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _quit)
@@ -102,9 +130,18 @@ def main() -> None:
 
     try:
         app.run()
+    except SystemExit:
+        pass
     except Exception as exc:
-        print(f"Fatal: {exc}")
+        logger.exception("Fatal: %s", exc)
         sys.exit(1)
+    finally:
+        try:
+            import RPi.GPIO as GPIO
+            GPIO.cleanup()
+            logger.info("GPIO cleaned up")
+        except ImportError:
+            pass
 
 
 if __name__ == "__main__":

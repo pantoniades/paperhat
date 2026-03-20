@@ -6,9 +6,12 @@ we typically only care about the first point for UI taps.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import Self
+
+logger = logging.getLogger(__name__)
 
 try:
     import RPi.GPIO as GPIO
@@ -116,7 +119,9 @@ class TouchPanel:
             raw_x, raw_y = raw_y, raw_x
         x = (SCREEN_W - 1 - raw_x) if APP.touch_invert_x else raw_x
         y = (SCREEN_H - 1 - raw_y) if APP.touch_invert_y else raw_y
-        return TouchPoint(
+        pt = TouchPoint(
             x=max(0, min(x, SCREEN_W - 1)),
             y=max(0, min(y, SCREEN_H - 1)),
         )
+        logger.debug("touch raw=(%d,%d) → mapped=(%d,%d)", raw_x, raw_y, pt.x, pt.y)
+        return pt

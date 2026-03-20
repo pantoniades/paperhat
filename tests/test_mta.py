@@ -347,3 +347,65 @@ class TestMTAServiceFetch:
         result = MTAService().fetch(station)
         assert len(result) == 1
         assert result[0].line == "B"
+
+
+class TestFetchBatch:
+    @responses.activate
+    def test_batch_distributes_to_correct_stations(self):
+        """Two stations sharing a feed should each get their own arrivals."""
+        stations = [
+            Station(name="A", lat=0, lon=0,
+                    stops=[StopInfo("239", ("2",), "", "")]),
+            Station(name="B", lat=0, lon=0,
+                    stops=[StopInfo("238", ("3",), "", "")]),
+        ]
+        now = time_mod.time()
+        data = _build_gtfs_feed([
+            ("2", "239N", now + 120),
+            ("3", "238S", now + 180),
+        ])
+        responses.get(
+            "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+            body=data, content_type="application/octet-stream",
+        )
+        results = MTAService().fetch_batch(stations)
+
+        assert len(results) == 2
+        assert len(results[0]) == 1
+        assert results[0][0].line == "2"
+        assert len(results[1]) == 1
+        assert results[1][0].line == "3"
+
+    @responses.activate
+    def test_batch_queries_each_feed_once(self):
+        """Two stations on the same feed should produce only one HTTP call."""
+        stations = [
+            Station(name="A", lat=0, lon=0,
+                    stops=[StopInfo("239", ("2",), "", "")]),
+            Station(name="B", lat=0, lon=0,
+                    stops=[StopInfo("238", ("3",), "", "")]),
+        ]
+        now = time_mod.time()
+        data = _build_gtfs_feed([
+            ("2", "239N", now + 120),
+            ("3", "238S", now + 180),
+        ])
+        responses.get(
+            "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+            body=data, content_type="application/octet-stream",
+        )
+        MTAService().fetch_batch(stations)
+        assert len(responses.calls) == 1  # single feed queried once
+
+    @responses.activate
+    def test_fetch_delegates_to_fetch_batch(self, sample_station):
+        """fetch() for a single station should use fetch_batch internally."""
+        now = time_mod.time()
+        data = _build_gtfs_feed([("2", "239N", now + 120)])
+        responses.get(
+            "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs",
+            body=data, content_type="application/octet-stream",
+        )
+        result = MTAService().fetch(sample_station)
+        assert len(result) == 1
+        assert result[0].line == "2"
