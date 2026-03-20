@@ -29,8 +29,9 @@ class EPD:
             display.show(my_image)
     """
 
-    WIDTH = HW.epd_width    # 122  (controller X-axis)
-    HEIGHT = HW.epd_height  # 250  (controller Y-axis)
+    WIDTH = HW.epd_width            # 122  (controller X-axis)
+    HEIGHT = HW.epd_height          # 250  (controller Y-axis)
+    ROW_BYTES = (WIDTH + 7) // 8    # 16   (128 bits per row in RAM)
 
     def __enter__(self) -> Self:
         if GPIO is None:
@@ -58,7 +59,7 @@ class EPD:
         """Clear the display to white."""
         self._set_cursor(0, 0)
         self._command(0x24)
-        self._data(b"\xFF" * (self.WIDTH // 8 * self.HEIGHT))
+        self._data(b"\xFF" * (self.ROW_BYTES * self.HEIGHT))
         self._update()
 
     def sleep(self) -> None:
@@ -142,7 +143,7 @@ class EPD:
         img = image.convert("1")
         w, h = img.size
         pixels = img.load()
-        buf = bytearray(b"\xFF" * (self.WIDTH // 8 * self.HEIGHT))
+        buf = bytearray(b"\xFF" * (self.ROW_BYTES * self.HEIGHT))
 
         if w == self.HEIGHT and h == self.WIDTH:
             # Landscape (250×122) → rotate into portrait buffer
@@ -150,12 +151,12 @@ class EPD:
                 for px in range(w):
                     if pixels[px, py] == 0:
                         nx, ny = py, self.HEIGHT - 1 - px
-                        buf[(nx + ny * self.WIDTH) // 8] &= ~(0x80 >> (nx % 8))
+                        buf[ny * self.ROW_BYTES + nx // 8] &= ~(0x80 >> (nx % 8))
         else:
             # Portrait (122×250) → direct copy
             for py in range(min(h, self.HEIGHT)):
                 for px in range(min(w, self.WIDTH)):
                     if pixels[px, py] == 0:
-                        buf[(px + py * self.WIDTH) // 8] &= ~(0x80 >> (px % 8))
+                        buf[py * self.ROW_BYTES + px // 8] &= ~(0x80 >> (px % 8))
 
         return bytes(buf)
