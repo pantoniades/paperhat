@@ -66,9 +66,10 @@ class TestTouchPanelRead:
 
     def test_one_point(self, touch_panel, mock_smbus):
         # Mock _i2c_read directly: first call returns status, second returns point data
+        # GT1158 format: no track ID — bytes 0-1 = X, bytes 2-3 = Y
         touch_panel._i2c_read = MagicMock(side_effect=[
             [0x81],                              # status: ready, 1 point
-            [0, 50, 0, 30, 0, 0, 0, 0],         # point data (8 bytes)
+            [50, 0, 30, 0, 0, 0, 0, 0],         # x=50, y=30
         ])
         touch_panel._i2c_write = MagicMock()
 

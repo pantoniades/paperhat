@@ -77,12 +77,13 @@ class TouchPanel:
         points: list[TouchPoint] = []
         if ready and 0 < n_points <= 5:
             data = self._i2c_read(self._POINTS, n_points * 8)
-            logger.info("touch status=0x%02X n=%d data=%s", status, n_points, data[:16])
+            logger.debug("touch status=0x%02X n=%d data=%s", status, n_points, data[:16])
             for i in range(n_points):
                 off = i * 8
-                raw_x = data[off + 1] | (data[off + 2] << 8)
-                raw_y = data[off + 3] | (data[off + 4] << 8)
-                logger.info("touch raw=(%d, %d)", raw_x, raw_y)
+                # GT1158 has no track-ID prefix: X at bytes 0-1, Y at bytes 2-3
+                raw_x = data[off] | (data[off + 1] << 8)
+                raw_y = data[off + 2] | (data[off + 3] << 8)
+                logger.debug("touch raw=(%d, %d)", raw_x, raw_y)
                 points.append(self._map(raw_x, raw_y))
 
         if ready:
@@ -102,28 +103,28 @@ class TouchPanel:
 
     # ── internals ───────────────────────────────────────────────
 
+    _KNOWN_MODELS = {"1158", "1151", "911"}
+
     def _log_device_info(self) -> None:
         """Read and log touch controller identity and configuration."""
         try:
-            # Product ID (4 bytes ASCII, e.g. "911\0" or "1151")
             pid_raw = self._i2c_read(self._PRODUCT_ID, 4)
             product_id = bytes(pid_raw).decode("ascii", errors="replace").rstrip("\x00")
 
-            # Firmware version (2 bytes little-endian)
             fw = self._i2c_read(self._FIRMWARE, 2)
             fw_ver = fw[0] | (fw[1] << 8)
 
-            # Config area: version (1 byte), x_max (2 LE), y_max (2 LE)
-            cfg = self._i2c_read(self._CONFIG, 5)
-            cfg_ver = cfg[0]
-            x_max = cfg[1] | (cfg[2] << 8)
-            y_max = cfg[3] | (cfg[4] << 8)
-
             logger.info(
-                "Touch IC: product=%r fw=0x%04X config_ver=%d "
-                "x_max=%d y_max=%d i2c_addr=0x%02X",
-                product_id, fw_ver, cfg_ver, x_max, y_max, HW.touch_addr,
+                "Touch IC: product=%r fw=0x%04X i2c_addr=0x%02X",
+                product_id, fw_ver, HW.touch_addr,
             )
+
+            if product_id not in self._KNOWN_MODELS:
+                logger.warning(
+                    "Unrecognised touch controller %r — touch parsing may "
+                    "be incorrect. Known models: %s",
+                    product_id, ", ".join(sorted(self._KNOWN_MODELS)),
+                )
         except Exception:
             logger.warning("Could not read touch device info", exc_info=True)
 

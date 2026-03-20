@@ -113,8 +113,9 @@ class App:
 
 
 def main() -> None:
+    debug = "--debug" in sys.argv
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG if debug else logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
