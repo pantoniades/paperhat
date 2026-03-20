@@ -17,7 +17,6 @@ from ui import (
     Rect,
     Refresh,
     RefreshArrivals,
-    RefreshStation,
     Screen,
     SelectStation,
     ShowSubway,
@@ -114,7 +113,7 @@ class TestWeatherScreen:
 
     def test_has_multiple_pages(self, sample_weather):
         screen = WeatherScreen(sample_weather)
-        assert screen._total >= 2
+        assert screen.total_pages >= 2
 
     def test_page_down(self, sample_weather):
         screen = WeatherScreen(sample_weather)
@@ -153,7 +152,7 @@ class TestSubwayScreen:
 
     def test_has_two_pages_for_six_stations(self, sample_stations):
         screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
-        assert screen._total == 2
+        assert screen.total_pages == 2
 
     def test_page_down_returns_refresh(self, sample_stations):
         screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
@@ -210,7 +209,7 @@ class TestStationScreen:
     def test_touch_body_refreshes(self, sample_arrivals, sample_station):
         screen = StationScreen(sample_arrivals, sample_station)
         action = screen.on_touch(TouchPoint(120, 80))
-        assert isinstance(action, RefreshStation)
+        assert isinstance(action, SelectStation)
         assert action.station is sample_station
 
     def test_long_name_does_not_crash(self, sample_arrivals):

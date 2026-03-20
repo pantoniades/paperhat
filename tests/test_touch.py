@@ -103,6 +103,31 @@ class TestTouchMapping:
         assert pt.y >= 0
 
 
+class TestTouchFlush:
+    def test_flush_drains_until_release(self, touch_panel):
+        """flush() reads until no touch, then returns."""
+        touch_panel.read = MagicMock(
+            side_effect=[[TouchPoint(50, 50)], [TouchPoint(50, 50)], []]
+        )
+        with patch("drivers.touch.time") as mock_time:
+            mock_time.sleep = lambda _: None
+            mock_time.monotonic.side_effect = [0, 0, 0, 0]
+            touch_panel.flush(timeout=5)
+
+        assert touch_panel.read.call_count == 3
+
+    def test_flush_respects_timeout(self, touch_panel):
+        """flush() stops after timeout even if finger stays down."""
+        touch_panel.read = MagicMock(return_value=[TouchPoint(50, 50)])
+        with patch("drivers.touch.time") as mock_time:
+            mock_time.sleep = lambda _: None
+            mock_time.monotonic.side_effect = [0, 0, 10]  # jump past deadline
+            touch_panel.flush(timeout=2)
+
+        # Should have stopped despite finger still down
+        assert touch_panel.read.call_count >= 1
+
+
 class TestTouchWait:
     def test_returns_on_touch(self, touch_panel):
         touch_panel.read = MagicMock(

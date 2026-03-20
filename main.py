@@ -23,7 +23,6 @@ from ui import (
     MessageScreen,
     Refresh,
     RefreshArrivals,
-    RefreshStation,
     Screen,
     SelectStation,
     ShowSubway,
@@ -119,8 +118,13 @@ class App:
                 self._push(self._load(epd, "Getting arrivals…",
                     self._build_subway_screen), epd)
             case SelectStation(station=s):
-                self._push(self._load(epd, "Getting arrivals…",
-                    lambda: StationScreen(self.mta.fetch(s), s)), epd)
+                new = self._load(epd, "Getting arrivals…",
+                    lambda: StationScreen(self.mta.fetch(s), s))
+                if isinstance(self._screen, StationScreen):
+                    self._screen = new  # refresh in-place, don't grow stack
+                    self._refresh(epd)
+                else:
+                    self._push(new, epd)
             case ShowWeekly():
                 self._push(self._load(epd, "Fetching forecast…",
                     lambda: WeeklyScreen(self.weather.fetch_weekly())), epd)
@@ -130,13 +134,6 @@ class App:
                 self._refresh(epd)
             case RefreshArrivals():
                 self._refresh_arrivals(epd)
-            case RefreshStation(station=s):
-                epd.show(MessageScreen("Refreshing…").render())
-                try:
-                    self._screen = StationScreen(self.mta.fetch(s), s)
-                except Exception:
-                    logger.warning("Station refresh failed", exc_info=True)
-                self._refresh(epd)
 
     def _refresh_arrivals(self, epd: EPD) -> None:
         """Re-fetch arrival data for the current SubwayScreen in-place."""

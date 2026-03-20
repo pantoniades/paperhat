@@ -79,7 +79,7 @@ class TestTouchToActionFlow:
 
     def test_tap_body_refreshes_station(self, sample_arrivals, sample_station):
         screen = StationScreen(sample_arrivals, sample_station)
-        assert type(screen.on_touch(TouchPoint(120, 80))).__name__ == "RefreshStation"
+        assert type(screen.on_touch(TouchPoint(120, 80))).__name__ == "SelectStation"
 
     def test_no_action_on_dead_zone(self, sample_weather):
         screen = WeatherScreen(sample_weather)

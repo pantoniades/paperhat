@@ -165,6 +165,29 @@ def nws_forecast_response() -> dict:
     return {"properties": {"periods": periods}}
 
 
+@pytest.fixture()
+def nws_daily_response() -> dict:
+    """NWS /forecast response with day/night period pairs."""
+    periods = []
+    names = ["Today", "Monday", "Tuesday", "Wednesday", "Thursday"]
+    for i, name in enumerate(names):
+        periods.append({
+            "name": name,
+            "isDaytime": True,
+            "temperature": 60 + i,
+            "temperatureUnit": "F",
+            "shortForecast": "Sunny" if i % 2 == 0 else "Rain",
+        })
+        periods.append({
+            "name": f"{name} Night",
+            "isDaytime": False,
+            "temperature": 45 + i,
+            "temperatureUnit": "F",
+            "shortForecast": "Clear",
+        })
+    return {"properties": {"periods": periods}}
+
+
 # ── MTA station API response fixture ───────────────────────────
 
 

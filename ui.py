@@ -37,7 +37,7 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-XL, LG, MD, SM = _font(28), _font(18), _font(13), _font(11)
+XXL, XL, LG, MD, SM = _font(36), _font(28), _font(18), _font(13), _font(11)
 
 # ── touch zones ─────────────────────────────────────────────────
 
@@ -95,14 +95,7 @@ class RefreshArrivals:
     """Re-fetch subway arrival data and re-render."""
 
 
-@dataclass(frozen=True, slots=True)
-class RefreshStation:
-    """Re-fetch arrivals for the current station."""
-
-    station: Station
-
-
-Action = ShowWeather | ShowSubway | ShowWeekly | SelectStation | GoBack | Refresh | RefreshArrivals | RefreshStation
+Action = ShowWeather | ShowSubway | ShowWeekly | SelectStation | GoBack | Refresh | RefreshArrivals
 
 # ── screen base ─────────────────────────────────────────────────
 
@@ -118,6 +111,28 @@ class Screen(ABC):
     def _canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
         img = Image.new("1", (SCREEN_W, SCREEN_H), 255)
         return img, ImageDraw.Draw(img)
+
+
+class PaginatedScreen(Screen):
+    """Screen with ▲/▼ page navigation."""
+
+    page: int = 0
+
+    @property
+    @abstractmethod
+    def total_pages(self) -> int: ...
+
+    def _page_touch(self, pt: TouchPoint) -> Action | None:
+        """Handle page-up/down taps. Returns Refresh or None."""
+        if self.total_pages <= 1:
+            return None
+        if _PAGE_UP_ZONE.contains(pt) and self.page > 0:
+            self.page -= 1
+            return Refresh()
+        if _PAGE_DOWN_ZONE.contains(pt) and self.page < self.total_pages - 1:
+            self.page += 1
+            return Refresh()
+        return None
 
 
 # ── shared helpers ──────────────────────────────────────────────
@@ -149,19 +164,6 @@ def _page_nav(draw: ImageDraw.ImageDraw, page: int, total: int) -> None:
     if page < total - 1:
         cx, cy = SCREEN_W - 20, SCREEN_H - 14
         draw.polygon([(cx, cy + 6), (cx - 6, cy - 2), (cx + 6, cy - 2)], fill=0)
-
-
-def _handle_page(pt: TouchPoint, screen: Screen, page: int, total: int) -> Action | None:
-    """Common page-up / page-down handler. Mutates screen.page."""
-    if total <= 1:
-        return None
-    if _PAGE_UP_ZONE.contains(pt) and page > 0:
-        screen.page -= 1  # type: ignore[attr-defined]
-        return Refresh()
-    if _PAGE_DOWN_ZONE.contains(pt) and page < total - 1:
-        screen.page += 1  # type: ignore[attr-defined]
-        return Refresh()
-    return None
 
 
 def _clock(arrival: Arrival) -> str:
@@ -220,14 +222,14 @@ class HomeScreen(Screen):
 
         # live weather icon + today's high/low
         cx, cy = mid // 2, SCREEN_H // 2 - 10
-        draw.text((cx, cy), self._icon, font=XL, fill=0, anchor="mm")
+        draw.text((cx, cy), self._icon, font=XXL, fill=0, anchor="mm")
         draw.text((cx, cy + 28), self._temps, font=MD, fill=0, anchor="mt")
 
-        # subway icon (circle with S)
-        sx, sy, sr = mid + mid // 2, SCREEN_H // 2 - 10, 20
-        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], outline=0, width=3)
-        draw.text((sx, sy), "S", font=LG, fill=0, anchor="mm")
-        draw.text((sx, sy + sr + 14), "Subway", font=MD, fill=0, anchor="mt")
+        # MTA logo — filled circle with white "MTA" text
+        sx, sy, sr = mid + mid // 2, SCREEN_H // 2 - 10, 22
+        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=0)
+        draw.text((sx, sy), "MTA", font=MD, fill=255, anchor="mm")
+        draw.text((sx, sy + sr + 12), "Subway", font=MD, fill=0, anchor="mt")
 
         return img
 
@@ -245,19 +247,23 @@ _WX_HOURLY_PAGE0 = 2
 _WX_HOURLY_PER_PAGE = 6
 
 
-class WeatherScreen(Screen):
+class WeatherScreen(PaginatedScreen):
     def __init__(self, data: Weather) -> None:
         self.data = data
         self.page = 0
         extra = max(0, len(data.hourly) - _WX_HOURLY_PAGE0)
         self._total = 1 + math.ceil(extra / _WX_HOURLY_PER_PAGE) if extra else 1
 
+    @property
+    def total_pages(self) -> int:
+        return self._total
+
     def render(self) -> Image.Image:
         img, draw = self._canvas()
         _back_arrow(draw)
         draw.text((40, 4), "NYC Weather", font=LG, fill=0)
         draw.text((160, 6), "Wk▸", font=SM, fill=0)
-        _page_nav(draw, self.page, self._total)
+        _page_nav(draw, self.page, self.total_pages)
 
         if self.page == 0:
             y = 30
@@ -287,7 +293,7 @@ class WeatherScreen(Screen):
             return GoBack()
         if _WEEKLY_ZONE.contains(pt):
             return ShowWeekly()
-        return _handle_page(pt, self, self.page, self._total)
+        return self._page_touch(pt)
 
 
 # ── WeeklyScreen (5-day forecast) ───────────────────────────────
@@ -332,7 +338,7 @@ class WeeklyScreen(Screen):
 _SUBWAY_PER_PAGE = 3
 
 
-class SubwayScreen(Screen):
+class SubwayScreen(PaginatedScreen):
     """Nearest stations with next arrival times, 3 per page."""
 
     _ROW_H = 30
@@ -342,7 +348,10 @@ class SubwayScreen(Screen):
         self.stations = stations
         self.arrivals = arrivals
         self.page = 0
-        self._total = math.ceil(len(stations) / _SUBWAY_PER_PAGE)
+
+    @property
+    def total_pages(self) -> int:
+        return math.ceil(len(self.stations) / _SUBWAY_PER_PAGE)
 
     def _page_slice(self) -> range:
         start = self.page * _SUBWAY_PER_PAGE
@@ -352,7 +361,7 @@ class SubwayScreen(Screen):
         img, draw = self._canvas()
         _back_arrow(draw)
         draw.text((40, 4), "Nearby Stations", font=MD, fill=0)
-        _page_nav(draw, self.page, self._total)
+        _page_nav(draw, self.page, self.total_pages)
         _hline(draw, self._TOP - 2)
 
         for row, i in enumerate(self._page_slice()):
@@ -372,7 +381,7 @@ class SubwayScreen(Screen):
             return GoBack()
         if _REFRESH_ZONE.contains(pt):
             return RefreshArrivals()
-        if paged := _handle_page(pt, self, self.page, self._total):
+        if paged := self._page_touch(pt):
             return paged
         for row, i in enumerate(self._page_slice()):
             zone = Rect(0, self._TOP + row * self._ROW_H, 200, self._ROW_H)
@@ -438,7 +447,7 @@ class StationScreen(Screen):
     def on_touch(self, pt: TouchPoint) -> Action | None:
         if _BACK_ZONE.contains(pt):
             return GoBack()
-        return RefreshStation(station=self.station)
+        return SelectStation(station=self.station)  # tap anywhere = refresh
 
 
 # ── MessageScreen ───────────────────────────────────────────────

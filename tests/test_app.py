@@ -103,6 +103,20 @@ class TestDispatch:
         app._dispatch(SelectStation(station=sample_station), mock_epd)
 
         assert isinstance(app._screen, StationScreen)
+        assert len(app._stack) == 1  # pushed onto stack
+
+    def test_select_station_replaces_when_already_on_station(
+        self, app, mock_epd, sample_station, sample_arrivals,
+    ):
+        """Tapping body on StationScreen refreshes in-place (no stack growth)."""
+        app.mta.fetch.return_value = sample_arrivals
+        app._dispatch(SelectStation(station=sample_station), mock_epd)
+        stack_before = len(app._stack)
+
+        # Tap again while on StationScreen — should replace, not push
+        app._dispatch(SelectStation(station=sample_station), mock_epd)
+        assert isinstance(app._screen, StationScreen)
+        assert len(app._stack) == stack_before  # stack didn't grow
 
     def test_show_weekly(self, app, mock_epd):
         from services.weather import DayForecast

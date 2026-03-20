@@ -1,10 +1,11 @@
-"""Tests for config dataclasses."""
+"""Tests for config dataclasses and TOML loading."""
 
 import dataclasses
+from unittest.mock import patch
 
 import pytest
 
-from config import APP, HW, SCREEN_H, SCREEN_W, AppConfig, HardwareConfig
+from config import APP, HW, SCREEN_H, SCREEN_W, AppConfig, HardwareConfig, _load_toml
 
 
 class TestHardwareConfig:
@@ -62,3 +63,38 @@ class TestScreenDimensions:
     def test_module_singletons(self):
         assert isinstance(HW, HardwareConfig)
         assert isinstance(APP, AppConfig)
+
+
+class TestTomlLoading:
+    def test_load_returns_empty_when_no_file(self, tmp_path):
+        with patch("config._CONFIG_PATH", tmp_path / "nonexistent.toml"):
+            assert _load_toml() == {}
+
+    def test_load_parses_toml_file(self, tmp_path):
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('lat = 41.0\nlon = -74.0\nmin_departure_minutes = 5\n')
+        with patch("config._CONFIG_PATH", toml_file):
+            data = _load_toml()
+        assert data["lat"] == 41.0
+        assert data["lon"] == -74.0
+        assert data["min_departure_minutes"] == 5
+
+    def test_toml_overrides_app_config(self, tmp_path):
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('lat = 0.0\nmin_departure_minutes = 3\n')
+        with patch("config._CONFIG_PATH", toml_file):
+            data = _load_toml()
+        overrides = {k: v for k, v in data.items() if k in AppConfig.__dataclass_fields__}
+        app = AppConfig(**overrides)
+        assert app.lat == 0.0
+        assert app.min_departure_minutes == 3
+        assert app.lon == pytest.approx(-73.9708)  # default preserved
+
+    def test_unknown_toml_keys_ignored(self, tmp_path):
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('lat = 41.0\nbogus_key = "hello"\n')
+        with patch("config._CONFIG_PATH", toml_file):
+            data = _load_toml()
+        overrides = {k: v for k, v in data.items() if k in AppConfig.__dataclass_fields__}
+        app = AppConfig(**overrides)  # should not raise
+        assert app.lat == 41.0
