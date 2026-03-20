@@ -1,0 +1,17 @@
+# PaperHat configuration
+# Copy to config.toml and adjust values.
+# All fields are optional — defaults are used for anything omitted.
+
+# Location — weather and nearby stations are based on this
+lat = 40.6742
+lon = -73.9708
+
+# Subway — hide departures arriving sooner than this (minutes).
+# Useful if your station is a few minutes' walk away.
+# min_departure_minutes = 0
+
+# Touch calibration — only change if coordinates are wrong.
+# Run `python main.py --debug` and tap corners to diagnose.
+# touch_swap_xy = true
+# touch_invert_x = false
+# touch_invert_y = true

@@ -144,6 +144,7 @@ def nws_points_response() -> dict:
     return {
         "properties": {
             "forecastHourly": "https://api.weather.gov/gridpoints/OKX/33,35/forecast/hourly",
+            "forecast": "https://api.weather.gov/gridpoints/OKX/33,35/forecast",
         }
     }
 

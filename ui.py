@@ -16,10 +16,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from config import SCREEN_H, SCREEN_W
+from config import APP, SCREEN_H, SCREEN_W
 from drivers.touch import TouchPoint
 from services.mta import Arrival, Station
-from services.weather import Weather
+from services.weather import DayForecast, Weather
 
 # ── fonts ───────────────────────────────────────────────────────
 
@@ -69,6 +69,11 @@ class ShowSubway:
 
 
 @dataclass(frozen=True, slots=True)
+class ShowWeekly:
+    """Navigate to the 5-day forecast screen."""
+
+
+@dataclass(frozen=True, slots=True)
 class SelectStation:
     """Navigate to arrivals for a specific station."""
 
@@ -85,7 +90,19 @@ class Refresh:
     """Re-render the current screen (e.g. after a page change)."""
 
 
-Action = ShowWeather | ShowSubway | SelectStation | GoBack | Refresh
+@dataclass(frozen=True, slots=True)
+class RefreshArrivals:
+    """Re-fetch subway arrival data and re-render."""
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshStation:
+    """Re-fetch arrivals for the current station."""
+
+    station: Station
+
+
+Action = ShowWeather | ShowSubway | ShowWeekly | SelectStation | GoBack | Refresh | RefreshArrivals | RefreshStation
 
 # ── screen base ─────────────────────────────────────────────────
 
@@ -108,6 +125,8 @@ class Screen(ABC):
 _BACK_ZONE = Rect(0, 0, 40, 32)
 _PAGE_UP_ZONE = Rect(200, 0, 50, SCREEN_H // 2)
 _PAGE_DOWN_ZONE = Rect(200, SCREEN_H // 2, 50, SCREEN_H // 2)
+_REFRESH_ZONE = Rect(40, 0, 110, 24)  # title area on SubwayScreen
+_WEEKLY_ZONE = Rect(150, 0, 50, 24)   # "Wk▸" button on WeatherScreen
 
 
 def _back_arrow(draw: ImageDraw.ImageDraw) -> None:
@@ -151,17 +170,33 @@ def _clock(arrival: Arrival) -> str:
     return f"{t} ({arrival.minutes}m)"
 
 
-def _future(arrivals: list[Arrival]) -> list[Arrival]:
-    """Filter out arrivals that are in the past."""
-    return [a for a in arrivals if a.is_future]
+def _reachable(arrivals: list[Arrival]) -> list[Arrival]:
+    """Filter arrivals to those still reachable (future + above min_departure_minutes)."""
+    cutoff = APP.min_departure_minutes
+    return [a for a in arrivals if a.is_future and a.minutes >= cutoff]
 
 
 def _next_arrival(arrivals: list[Arrival], direction: str) -> Arrival | None:
-    """First future arrival in the given direction, or None."""
+    """First reachable arrival in the given direction, or None."""
+    cutoff = APP.min_departure_minutes
     for a in arrivals:
-        if a.is_future and a.direction == direction:
+        if a.is_future and a.minutes >= cutoff and a.direction == direction:
             return a
     return None
+
+
+def _weather_icon(summary: str) -> str:
+    """Map a forecast summary to a Unicode weather symbol."""
+    s = summary.lower()
+    if any(w in s for w in ("rain", "shower", "thunder", "storm")):
+        return "☂"
+    if any(w in s for w in ("snow", "sleet", "ice", "flurr")):
+        return "❄"
+    if any(w in s for w in ("sunny", "clear", "fair")):
+        return "☀"
+    if "partly" in s:
+        return "⛅"
+    return "☁"
 
 
 # ── HomeScreen ──────────────────────────────────────────────────
@@ -208,8 +243,8 @@ class HomeScreen(Screen):
 
 # ── WeatherScreen ───────────────────────────────────────────────
 
-_WX_HOURLY_PAGE0 = 2   # hourly entries that fit alongside conditions
-_WX_HOURLY_PER_PAGE = 6  # hourly entries on a full page
+_WX_HOURLY_PAGE0 = 2
+_WX_HOURLY_PER_PAGE = 6
 
 
 class WeatherScreen(Screen):
@@ -223,6 +258,7 @@ class WeatherScreen(Screen):
         img, draw = self._canvas()
         _back_arrow(draw)
         draw.text((40, 4), "NYC Weather", font=LG, fill=0)
+        draw.text((160, 6), "Wk▸", font=SM, fill=0)
         _page_nav(draw, self.page, self._total)
 
         if self.page == 0:
@@ -251,7 +287,46 @@ class WeatherScreen(Screen):
     def on_touch(self, pt: TouchPoint) -> Action | None:
         if _BACK_ZONE.contains(pt):
             return GoBack()
+        if _WEEKLY_ZONE.contains(pt):
+            return ShowWeekly()
         return _handle_page(pt, self, self.page, self._total)
+
+
+# ── WeeklyScreen (5-day forecast) ───────────────────────────────
+
+
+class WeeklyScreen(Screen):
+    """5-day forecast with weather icons."""
+
+    def __init__(self, days: list[DayForecast]) -> None:
+        self.days = days
+
+    def render(self) -> Image.Image:
+        img, draw = self._canvas()
+        _back_arrow(draw)
+        draw.text((40, 4), "5-Day Forecast", font=MD, fill=0)
+        _hline(draw, 22)
+
+        y = 26
+        for day in self.days:
+            icon = _weather_icon(day.summary)
+            temps = f"{day.high}/{day.low}" if day.low is not None else f"{day.high}"
+
+            # day name (short)
+            name = day.name[:3] if len(day.name) > 5 else day.name
+            draw.text((10, y), name, font=SM, fill=0)
+            draw.text((50, y), icon, font=MD, fill=0)
+            draw.text((68, y), temps, font=SM, fill=0)
+
+            # truncate summary to fit
+            summary = day.summary if len(day.summary) <= 16 else day.summary[:14] + "…"
+            draw.text((110, y), summary, font=SM, fill=0)
+            y += 18
+
+        return img
+
+    def on_touch(self, pt: TouchPoint) -> Action | None:
+        return GoBack() if _BACK_ZONE.contains(pt) else None
 
 
 # ── SubwayScreen (nearest stations, paginated) ──────────────────
@@ -297,6 +372,8 @@ class SubwayScreen(Screen):
     def on_touch(self, pt: TouchPoint) -> Action | None:
         if _BACK_ZONE.contains(pt):
             return GoBack()
+        if _REFRESH_ZONE.contains(pt):
+            return RefreshArrivals()
         if paged := _handle_page(pt, self, self.page, self._total):
             return paged
         for row, i in enumerate(self._page_slice()):
@@ -326,7 +403,7 @@ class StationScreen(Screen):
         draw.text((40, 4), name, font=MD, fill=0)
         _hline(draw, 22)
 
-        live = _future(self.arrivals)
+        live = _reachable(self.arrivals)
         north = [a for a in live if a.direction == "N"]
         south = [a for a in live if a.direction == "S"]
 
@@ -361,7 +438,9 @@ class StationScreen(Screen):
         return y + 14
 
     def on_touch(self, pt: TouchPoint) -> Action | None:
-        return GoBack() if _BACK_ZONE.contains(pt) else None
+        if _BACK_ZONE.contains(pt):
+            return GoBack()
+        return RefreshStation(station=self.station)
 
 
 # ── MessageScreen ───────────────────────────────────────────────

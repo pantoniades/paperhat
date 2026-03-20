@@ -11,13 +11,16 @@ from ui import (
     HomeScreen,
     MessageScreen,
     Refresh,
+    RefreshArrivals,
     Screen,
     SelectStation,
     ShowSubway,
     ShowWeather,
+    ShowWeekly,
     StationScreen,
     SubwayScreen,
     WeatherScreen,
+    WeeklyScreen,
 )
 
 
@@ -98,6 +101,23 @@ class TestDispatch:
         app._dispatch(SelectStation(station=sample_station), mock_epd)
 
         assert isinstance(app._screen, StationScreen)
+
+    def test_show_weekly(self, app, mock_epd):
+        from services.weather import DayForecast
+
+        app.weather.fetch_weekly.return_value = [DayForecast("Mon", 58, 42, "Sunny")]
+        app._dispatch(ShowWeekly(), mock_epd)
+        assert isinstance(app._screen, WeeklyScreen)
+
+    def test_refresh_arrivals(self, app, mock_epd, sample_arrivals):
+        app.mta.fetch_batch.return_value = [sample_arrivals] + [[] for _ in range(5)]
+        app._dispatch(ShowSubway(), mock_epd)
+        assert isinstance(app._screen, SubwayScreen)
+
+        app.mta.fetch_batch.return_value = [[] for _ in range(6)]
+        app._dispatch(RefreshArrivals(), mock_epd)
+        assert isinstance(app._screen, SubwayScreen)
+        assert app._screen.arrivals == [[] for _ in range(6)]
 
     def test_refresh_rerenders_current_screen(self, app, mock_epd):
         mock_epd.show.reset_mock()

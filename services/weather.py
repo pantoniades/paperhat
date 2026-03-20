@@ -12,7 +12,8 @@ from config import APP
 
 logger = logging.getLogger(__name__)
 
-_CACHE_TTL = 30 * 60  # 30 minutes
+_HOURLY_TTL = 30 * 60    # 30 minutes
+_WEEKLY_TTL = 2 * 60 * 60  # 2 hours
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,26 +34,39 @@ class Weather:
     hourly: list[HourForecast]
 
 
+@dataclass(frozen=True, slots=True)
+class DayForecast:
+    """One day in the 5-day forecast."""
+
+    name: str       # "Today", "Monday", etc.
+    high: int
+    low: int | None
+    summary: str    # "Sunny", "Rain", etc.
+
+
 class WeatherService:
-    """Fetches hourly forecast from api.weather.gov."""
+    """Fetches hourly and daily forecasts from api.weather.gov."""
 
     _BASE = "https://api.weather.gov"
 
     def __init__(self) -> None:
         self._headers = {"User-Agent": f"({APP.nws_agent})"}
-        self._forecast_url: str | None = None
+        self._hourly_url: str | None = None
+        self._daily_url: str | None = None
         self._cached: Weather | None = None
         self._cached_at: float = 0.0
+        self._weekly: list[DayForecast] | None = None
+        self._weekly_at: float = 0.0
 
     def fetch(self) -> Weather:
         now = time.monotonic()
-        if self._cached and (now - self._cached_at) < _CACHE_TTL:
+        if self._cached and (now - self._cached_at) < _HOURLY_TTL:
             logger.debug("Weather cache hit (age %.0fs)", now - self._cached_at)
             return self._cached
 
-        url = self._resolve_forecast_url()
+        self._resolve_urls()
         periods = (
-            requests.get(url, headers=self._headers, timeout=10)
+            requests.get(self._hourly_url, headers=self._headers, timeout=10)
             .json()["properties"]["periods"]
         )
         cur = periods[0]
@@ -71,16 +85,55 @@ class WeatherService:
             ],
         )
         self._cached_at = now
-        logger.info("Weather fetched and cached for %dm", _CACHE_TTL // 60)
+        logger.info("Weather fetched and cached for %dm", _HOURLY_TTL // 60)
         return self._cached
 
-    def _resolve_forecast_url(self) -> str:
-        if self._forecast_url is None:
-            resp = requests.get(
-                f"{self._BASE}/points/{APP.lat},{APP.lon}",
-                headers=self._headers,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            self._forecast_url = resp.json()["properties"]["forecastHourly"]
-        return self._forecast_url
+    def fetch_weekly(self) -> list[DayForecast]:
+        now = time.monotonic()
+        if self._weekly and (now - self._weekly_at) < _WEEKLY_TTL:
+            logger.debug("Weekly cache hit (age %.0fs)", now - self._weekly_at)
+            return self._weekly
+
+        self._resolve_urls()
+        periods = (
+            requests.get(self._daily_url, headers=self._headers, timeout=10)
+            .json()["properties"]["periods"]
+        )
+
+        days: list[DayForecast] = []
+        i = 0
+        while i < len(periods) and len(days) < 5:
+            p = periods[i]
+            if p["isDaytime"]:
+                low = (
+                    periods[i + 1]["temperature"]
+                    if i + 1 < len(periods) and not periods[i + 1]["isDaytime"]
+                    else None
+                )
+                days.append(DayForecast(
+                    name=p["name"],
+                    high=p["temperature"],
+                    low=low,
+                    summary=p["shortForecast"],
+                ))
+                i += 2 if low is not None else 1
+            else:
+                i += 1  # skip standalone nighttime period
+
+        self._weekly = days
+        self._weekly_at = now
+        logger.info("Weekly forecast fetched and cached for %dh", _WEEKLY_TTL // 3600)
+        return self._weekly
+
+    def _resolve_urls(self) -> None:
+        if self._hourly_url is not None:
+            return
+        resp = requests.get(
+            f"{self._BASE}/points/{APP.lat},{APP.lon}",
+            headers=self._headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        props = resp.json()["properties"]
+        self._hourly_url = props["forecastHourly"]
+        self._daily_url = props["forecast"]

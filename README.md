@@ -6,15 +6,15 @@ Touch e-Paper dashboard for Raspberry Pi Zero W — weather and NYC subway arriv
 
 Tap-driven home screen with two icons:
 
-- **Weather** — current conditions and hourly forecast via the free [NWS API](https://www.weather.gov/documentation/services-web-api)
-- **Subway** — 3 nearest stations (by lat/lon), tap a station to see real-time arrivals grouped by direction via [MTA GTFS-RT](https://api.mta.info/)
+- **Weather** — current conditions, paginated hourly forecast, and 5-day outlook with weather icons via the free [NWS API](https://www.weather.gov/documentation/services-web-api)
+- **Subway** — 6 nearest stations with live arrival times, tap a station for details, tap anywhere to refresh via [MTA GTFS-RT](https://api.mta.info/)
 
-Navigation is stack-based: back arrow returns to the previous screen.
+Navigation is stack-based: back arrow (top-left) returns to the previous screen. Paginated screens show ▲/▼ arrows on the right edge.
 
 ## Hardware
 
 - Raspberry Pi Zero W (or any 40-pin Pi)
-- [Waveshare 2.13" Touch e-Paper HAT](https://www.waveshare.com/2.13inch-touch-e-paper-hat.htm) — SSD1680 display + GT1151 capacitive touch over I2C
+- [Waveshare 2.13" Touch e-Paper HAT](https://www.waveshare.com/2.13inch-touch-e-paper-hat.htm) — SSD1680 display + GT1158 capacitive touch over I2C
 
 ## Setup
 
@@ -34,35 +34,45 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Edit `config.py` to set your location (defaults to Grand Army Plaza, Brooklyn):
+Copy the example and edit:
 
-```python
-@dataclass(frozen=True, slots=True)
-class AppConfig:
-    lat: float = 40.6742
-    lon: float = -73.9708
+```bash
+cp config.example.toml config.toml
+nano config.toml
 ```
 
-Weather and subway station discovery both key off this single `(lat, lon)`.
+```toml
+# Location — weather and nearby stations are based on this
+lat = 40.6742
+lon = -73.9708
+
+# Hide departures arriving sooner than this (minutes)
+min_departure_minutes = 3
+```
+
+All fields are optional — defaults (Grand Army Plaza, Brooklyn) are used for anything omitted. See `config.example.toml` for all options. `config.toml` is gitignored so your settings survive `git pull`.
 
 ## Run
 
 ```bash
-python main.py
+python main.py           # normal mode
+python main.py --debug   # verbose touch + API logging
 ```
 
 ## Project structure
 
 ```
 ├── main.py              App + nav stack + entry point
-├── config.py            Frozen dataclass configs
+├── config.py            Dataclass defaults + TOML loader
+├── config.example.toml  Template config (tracked in git)
+├── config.toml          Your local config (gitignored)
 ├── drivers/
 │   ├── epd.py           SSD1680 e-Paper driver (context manager)
-│   └── touch.py         GT1151 touch driver (context manager)
+│   └── touch.py         GT1158 touch driver (context manager)
 ├── services/
-│   ├── weather.py       NWS hourly forecast
+│   ├── weather.py       NWS hourly + daily forecast
 │   └── mta.py           Station finder + GTFS-RT arrivals
-└── ui.py                Screen ABC + Home/Weather/Subway/Station screens
+└── ui.py                Screen ABC + all screens + pagination
 ```
 
 ## License

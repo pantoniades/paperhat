@@ -16,13 +16,17 @@ from ui import (
     MessageScreen,
     Rect,
     Refresh,
+    RefreshArrivals,
+    RefreshStation,
     Screen,
     SelectStation,
     ShowSubway,
     ShowWeather,
+    ShowWeekly,
     StationScreen,
     SubwayScreen,
     WeatherScreen,
+    WeeklyScreen,
 )
 
 # ── Rect ────────────────────────────────────────────────────────
@@ -103,7 +107,7 @@ class TestWeatherScreen:
         assert isinstance(WeatherScreen(sample_weather).on_touch(TouchPoint(15, 10)), GoBack)
 
     def test_touch_elsewhere_returns_none(self, sample_weather):
-        assert WeatherScreen(sample_weather).on_touch(TouchPoint(150, 100)) is None
+        assert WeatherScreen(sample_weather).on_touch(TouchPoint(100, 100)) is None
 
     def test_has_multiple_pages(self, sample_weather):
         screen = WeatherScreen(sample_weather)
@@ -114,6 +118,10 @@ class TestWeatherScreen:
         action = screen.on_touch(TouchPoint(220, 100))
         assert isinstance(action, Refresh)
         assert screen.page == 1
+
+    def test_weekly_button(self, sample_weather):
+        action = WeatherScreen(sample_weather).on_touch(TouchPoint(165, 10))
+        assert isinstance(action, ShowWeekly)
 
 
 class TestSubwayScreen:
@@ -161,6 +169,32 @@ class TestSubwayScreen:
         screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
         assert screen.on_touch(TouchPoint(220, 20)) is None  # already on page 0
 
+    def test_tap_title_refreshes_arrivals(self, sample_stations):
+        screen = SubwayScreen(sample_stations, [[] for _ in sample_stations])
+        action = screen.on_touch(TouchPoint(80, 10))  # title area
+        assert isinstance(action, RefreshArrivals)
+
+
+class TestWeeklyScreen:
+    def test_render_size_and_mode(self):
+        from services.weather import DayForecast
+
+        days = [DayForecast("Mon", 58, 42, "Sunny"),
+                DayForecast("Tue", 52, 38, "Rain")]
+        _assert_valid_screen_image(WeeklyScreen(days).render())
+
+    def test_touch_back(self):
+        from services.weather import DayForecast
+
+        screen = WeeklyScreen([DayForecast("Mon", 58, 42, "Sunny")])
+        assert isinstance(screen.on_touch(TouchPoint(15, 10)), GoBack)
+
+    def test_touch_elsewhere_returns_none(self):
+        from services.weather import DayForecast
+
+        screen = WeeklyScreen([DayForecast("Mon", 58, 42, "Sunny")])
+        assert screen.on_touch(TouchPoint(120, 60)) is None
+
 
 class TestStationScreen:
     def test_render_size_and_mode(self, sample_arrivals, sample_station):
@@ -170,9 +204,11 @@ class TestStationScreen:
         screen = StationScreen(sample_arrivals, sample_station)
         assert isinstance(screen.on_touch(TouchPoint(15, 10)), GoBack)
 
-    def test_touch_elsewhere_returns_none(self, sample_arrivals, sample_station):
+    def test_touch_body_refreshes(self, sample_arrivals, sample_station):
         screen = StationScreen(sample_arrivals, sample_station)
-        assert screen.on_touch(TouchPoint(200, 100)) is None
+        action = screen.on_touch(TouchPoint(120, 80))
+        assert isinstance(action, RefreshStation)
+        assert action.station is sample_station
 
     def test_long_name_does_not_crash(self, sample_arrivals):
         station = Station(

@@ -9,7 +9,7 @@ from PIL import Image
 
 from drivers.touch import TouchPoint
 from services.mta import Arrival, Station, StopInfo
-from ui import HomeScreen, MessageScreen, StationScreen, SubwayScreen, WeatherScreen
+from ui import HomeScreen, MessageScreen, StationScreen, SubwayScreen, WeatherScreen, WeeklyScreen
 
 
 class TestRenderedImagesAreValidForEPD:
@@ -41,6 +41,12 @@ class TestRenderedImagesAreValidForEPD:
     def test_empty_station_screen(self, sample_station):
         self._assert_valid_buffer(StationScreen([], sample_station).render())
 
+    def test_weekly_screen(self):
+        from services.weather import DayForecast
+
+        days = [DayForecast("Mon", 58, 42, "Sunny"), DayForecast("Tue", 50, 35, "Rain")]
+        self._assert_valid_buffer(WeeklyScreen(days).render())
+
 
 class TestTouchToActionFlow:
     """Verify touch coordinates produce the right actions across screens."""
@@ -69,8 +75,11 @@ class TestTouchToActionFlow:
 
     def test_back_from_station(self, sample_arrivals, sample_station):
         screen = StationScreen(sample_arrivals, sample_station)
-        action = screen.on_touch(TouchPoint(10, 10))
-        assert type(action).__name__ == "GoBack"
+        assert type(screen.on_touch(TouchPoint(10, 10))).__name__ == "GoBack"
+
+    def test_tap_body_refreshes_station(self, sample_arrivals, sample_station):
+        screen = StationScreen(sample_arrivals, sample_station)
+        assert type(screen.on_touch(TouchPoint(120, 80))).__name__ == "RefreshStation"
 
     def test_no_action_on_dead_zone(self, sample_weather):
         screen = WeatherScreen(sample_weather)

@@ -21,13 +21,17 @@ from ui import (
     HomeScreen,
     MessageScreen,
     Refresh,
+    RefreshArrivals,
+    RefreshStation,
     Screen,
     SelectStation,
     ShowSubway,
     ShowWeather,
+    ShowWeekly,
     StationScreen,
     SubwayScreen,
     WeatherScreen,
+    WeeklyScreen,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,10 +85,32 @@ class App:
             case SelectStation(station=s):
                 self._push(self._load(epd, "Getting arrivals…",
                     lambda: StationScreen(self.mta.fetch(s), s)), epd)
+            case ShowWeekly():
+                self._push(self._load(epd, "Fetching forecast…",
+                    lambda: WeeklyScreen(self.weather.fetch_weekly())), epd)
             case GoBack():
                 self._pop(epd)
             case Refresh():
                 self._refresh(epd)
+            case RefreshArrivals():
+                self._refresh_arrivals(epd)
+            case RefreshStation(station=s):
+                epd.show(MessageScreen("Refreshing…").render())
+                try:
+                    self._screen = StationScreen(self.mta.fetch(s), s)
+                except Exception:
+                    logger.warning("Station refresh failed", exc_info=True)
+                self._refresh(epd)
+
+    def _refresh_arrivals(self, epd: EPD) -> None:
+        """Re-fetch arrival data for the current SubwayScreen in-place."""
+        epd.show(MessageScreen("Refreshing…").render())
+        try:
+            self._screen.arrivals = self.mta.fetch_batch(self._nearby)  # type: ignore[union-attr]
+            logger.info("Arrivals refreshed")
+        except Exception:
+            logger.warning("Refresh failed, keeping stale data", exc_info=True)
+        self._refresh(epd)
 
     def _build_subway_screen(self) -> SubwayScreen:
         arrivals = self.mta.fetch_batch(self._nearby)

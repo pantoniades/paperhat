@@ -39,6 +39,7 @@ class TestAppConfig:
         assert app.lat == pytest.approx(40.6742)
         assert app.lon == pytest.approx(-73.9708)
         assert app.nws_agent == "paperhat-app"
+        assert app.min_departure_minutes == 0
         assert app.touch_swap_xy is True
         assert app.touch_invert_x is False
         assert app.touch_invert_y is True
