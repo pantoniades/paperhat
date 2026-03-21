@@ -2,7 +2,7 @@
 
 ## v1.0
 - [ ] Partial refresh — load SSD1680 LUT for partial update, eliminates screen blink on page changes and refreshes (~0.3s vs ~2s). Needs periodic full refresh to clear ghosting.
-- [ ] Systemd service installer — auto-start on boot
+- [x] Systemd service installer — `./install.sh` and `./uninstall.sh`
 
 ## Polish
 - [ ] Review fonts and text sizes across all screens for readability on the physical display
