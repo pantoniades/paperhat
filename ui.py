@@ -187,18 +187,84 @@ def _next_arrival(arrivals: list[Arrival], direction: str) -> Arrival | None:
     return None
 
 
-def _weather_icon(summary: str) -> str:
-    """Map a forecast summary to a Unicode weather symbol."""
+def _weather_kind(summary: str) -> str:
+    """Map a forecast summary to a weather kind key."""
     s = summary.lower()
     if any(w in s for w in ("rain", "shower", "thunder", "storm")):
-        return "☂"
+        return "rain"
     if any(w in s for w in ("snow", "sleet", "ice", "flurr")):
-        return "❄"
+        return "snow"
     if any(w in s for w in ("sunny", "clear", "fair")):
-        return "☀"
+        return "sun"
     if "partly" in s:
-        return "⛅"
-    return "☁"
+        return "partly"
+    return "cloud"
+
+
+def _draw_weather_icon(
+    draw: ImageDraw.ImageDraw, cx: int, cy: int, size: int, kind: str,
+) -> None:
+    """Draw a weather icon centred at (cx, cy) using only primitives.
+
+    *size* is the approximate bounding-box height/width in pixels.
+    """
+    r = size // 2
+
+    if kind == "sun":
+        # circle with rays
+        sr = r * 5 // 9
+        draw.ellipse([cx - sr, cy - sr, cx + sr, cy + sr], outline=0, width=2)
+        for angle_deg in range(0, 360, 45):
+            rad = math.radians(angle_deg)
+            x0 = cx + int(sr * 1.4 * math.cos(rad))
+            y0 = cy - int(sr * 1.4 * math.sin(rad))
+            x1 = cx + int(r * 0.95 * math.cos(rad))
+            y1 = cy - int(r * 0.95 * math.sin(rad))
+            draw.line([(x0, y0), (x1, y1)], fill=0, width=1)
+
+    elif kind == "cloud":
+        _draw_cloud(draw, cx, cy, r)
+
+    elif kind == "partly":
+        # small sun peeking upper-right, cloud overlapping lower-left
+        _draw_weather_icon(draw, cx + r // 3, cy - r // 3, size * 2 // 3, "sun")
+        _draw_cloud(draw, cx - r // 5, cy + r // 5, r * 2 // 3)
+
+    elif kind == "rain":
+        cr = r * 2 // 3
+        _draw_cloud(draw, cx, cy - r // 4, cr)
+        # three rain drops
+        for dx in (-cr // 2, 0, cr // 2):
+            x = cx + dx
+            y0 = cy + cr // 2
+            draw.line([(x, y0), (x - 2, y0 + r // 3)], fill=0, width=1)
+
+    elif kind == "snow":
+        cr = r * 2 // 3
+        _draw_cloud(draw, cx, cy - r // 4, cr)
+        # three snowflake dots
+        dot = max(1, size // 14)
+        for dx in (-cr // 2, 0, cr // 2):
+            x = cx + dx
+            y = cy + cr // 2 + r // 4
+            draw.ellipse([x - dot, y - dot, x + dot, y + dot], fill=0)
+
+
+def _draw_cloud(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int) -> None:
+    """Draw a simple cloud shape centred at (cx, cy) with radius *r*."""
+    # flat base with two bumps
+    bw = r  # half-width of base
+    draw.line([(cx - bw, cy + r // 3), (cx + bw, cy + r // 3)], fill=0, width=2)
+    # left bump
+    draw.arc(
+        [cx - bw, cy - r // 2, cx, cy + r // 3],
+        180, 0, fill=0, width=2,
+    )
+    # right bump (taller)
+    draw.arc(
+        [cx - r // 4, cy - r * 3 // 4, cx + bw, cy + r // 3],
+        180, 0, fill=0, width=2,
+    )
 
 
 # ── HomeScreen ──────────────────────────────────────────────────
@@ -211,7 +277,7 @@ class HomeScreen(Screen):
     _RIGHT = Rect(SCREEN_W // 2, 0, SCREEN_W // 2, SCREEN_H)
 
     def __init__(self, summary: str = "", high_low: str = "Weather") -> None:
-        self._icon = _weather_icon(summary) if summary else "☀"
+        self._kind = _weather_kind(summary) if summary else "partly"
         self._temps = high_low
 
     def render(self) -> Image.Image:
@@ -222,7 +288,7 @@ class HomeScreen(Screen):
 
         # live weather icon + today's high/low
         cx, cy = mid // 2, SCREEN_H // 2 - 10
-        draw.text((cx, cy), self._icon, font=XXL, fill=0, anchor="mm")
+        _draw_weather_icon(draw, cx, cy, 40, self._kind)
         draw.text((cx, cy + 28), self._temps, font=MD, fill=0, anchor="mt")
 
         # MTA logo — filled circle with white "MTA" text
@@ -313,13 +379,13 @@ class WeeklyScreen(Screen):
 
         y = 26
         for day in self.days:
-            icon = _weather_icon(day.summary)
+            kind = _weather_kind(day.summary)
             temps = f"{day.high}/{day.low}" if day.low is not None else f"{day.high}"
 
             # day name (short)
             name = day.name[:3] if len(day.name) > 5 else day.name
             draw.text((10, y), name, font=SM, fill=0)
-            draw.text((50, y), icon, font=MD, fill=0)
+            _draw_weather_icon(draw, 55, y + 6, 12, kind)
             draw.text((68, y), temps, font=SM, fill=0)
 
             # truncate summary to fit
